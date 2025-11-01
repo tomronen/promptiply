@@ -45,14 +45,23 @@
   $tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.tab)));
   function selectTab(name){
     $tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-    Object.entries($tabPanels).forEach(([k, el]) => { if (el) el.style.display = (k === name) ? '' : 'none'; });
+    Object.entries($tabPanels).forEach(([k, el]) => { 
+      if (el) {
+        if (k === name) {
+          el.classList.remove('tab-panel-hidden');
+        } else {
+          el.classList.add('tab-panel-hidden');
+        }
+      }
+    });
   }
 
   function updateProviderDisabled() {
     const isWebUI = $mode.value === 'webui';
+    const isLocal = $mode.value === 'local';
     const $providerField = $provider.closest('.field');
     if ($providerField) {
-      $providerField.classList.toggle('disabled', isWebUI);
+      $providerField.classList.toggle('disabled', isWebUI || isLocal);
     }
   }
 
@@ -110,15 +119,15 @@
     const opts = Array.from(selectEl.options).map(o => o.value);
     if (value && opts.includes(value)) {
       selectEl.value = value;
-      customEl.style.display = 'none';
+      customEl.classList.add('custom-input-hidden');
       customEl.value = '';
     } else if (value) {
       selectEl.value = 'custom';
-      customEl.style.display = '';
+      customEl.classList.remove('custom-input-hidden');
       customEl.value = value;
     } else {
       selectEl.value = opts[0];
-      customEl.style.display = 'none';
+      customEl.classList.add('custom-input-hidden');
       customEl.value = '';
     }
   }
@@ -129,20 +138,20 @@
 
   $openaiModelSelect.addEventListener('change', () => {
     if ($openaiModelSelect.value === 'custom') {
-      $openaiModelCustom.style.display = '';
+      $openaiModelCustom.classList.remove('custom-input-hidden');
       $openaiModelCustom.focus();
     } else {
-      $openaiModelCustom.style.display = 'none';
+      $openaiModelCustom.classList.add('custom-input-hidden');
       $openaiModelCustom.value = '';
     }
   });
 
   $anthropicModelSelect.addEventListener('change', () => {
     if ($anthropicModelSelect.value === 'custom') {
-      $anthropicModelCustom.style.display = '';
+      $anthropicModelCustom.classList.remove('custom-input-hidden');
       $anthropicModelCustom.focus();
     } else {
-      $anthropicModelCustom.style.display = 'none';
+      $anthropicModelCustom.classList.add('custom-input-hidden');
       $anthropicModelCustom.value = '';
     }
   });
@@ -367,18 +376,18 @@
 
   function openWizard(existing) {
     wizardState = { step: 1, editingId: existing?.id || null, name: existing?.name || '', persona: existing?.persona || '', tone: existing?.tone || '', guidelines: existing?.styleGuidelines || [] };
-    $modal.style.display = 'block';
+    $modal.classList.add('modal-show');
     setWizardStep(1);
   }
   function closeWizard() {
-    $modal.style.display = 'none';
+    $modal.classList.remove('modal-show');
   }
   function setWizardStep(step) {
     wizardState.step = Math.max(1, Math.min(3, step));
     $wizardSteps.forEach(s => s.classList.toggle('active', Number(s.dataset.step) === wizardState.step));
-    $wizardBack.style.display = wizardState.step === 1 ? 'none' : '';
-    $wizardNext.style.display = wizardState.step === 3 ? 'none' : '';
-    $wizardSave.style.display = wizardState.step === 3 ? '' : 'none';
+    $wizardBack.classList.toggle('tab-panel-hidden', wizardState.step === 1);
+    $wizardNext.classList.toggle('tab-panel-hidden', wizardState.step === 3);
+    $wizardSave.classList.toggle('wizard-save-hidden', wizardState.step !== 3);
     if (wizardState.step === 1) {
       $wizardBody.innerHTML = `
         <div class="grid">

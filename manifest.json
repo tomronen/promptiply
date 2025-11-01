@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "promptiply",
   "version": "0.2.0",
-  "description": "promptiply refines prompts inline on ChatGPT and Claude using profiles and API/WebUI modes.",
+  "description": "promptiply refines prompts inline on ChatGPT and Claude using profiles and API/WebUI/Local modes.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
@@ -13,15 +13,8 @@
     "scripting",
     "activeTab",
     "tabs",
-    "commands"
-  ],
-  "host_permissions": [
-    "https://chat.openai.com/*",
-    "https://chatgpt.com/*",
-    "https://www.chatgpt.com/*",
-    "https://claude.ai/*",
-    "https://api.anthropic.com/*",
-    "https://api.openai.com/*"
+    "commands",
+    "offscreen"
   ],
   "background": {
     "service_worker": "background/service_worker.js"
@@ -49,18 +42,38 @@
   },
   "options_page": "options/index.html",
   "commands": {
-    "refine": {
-      "suggested_key": {
-        "default": "Alt+T",
-        "mac": "MacCtrl+T"
-      },
-      "description": "Refine current prompt"
-    },
-    "switch-profile": {
-      "suggested_key": {
-        "default": "Alt+Shift+P"
-      },
-      "description": "Switch profile"
+    "refine": { "suggested_key": { "default": "Alt+T", "mac": "MacCtrl+T" }, "description": "Refine current prompt" },
+    "switch-profile": { "suggested_key": { "default": "Alt+Shift+P" }, "description": "Switch profile" }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; default-src 'self' data: blob:; connect-src 'self' data: blob: http://localhost:8000 https://huggingface.co https://cdn-lfs.huggingface.co https://cdn-lfs-us-1.huggingface.co https://cdn-lfs-us-1.hf.co https://cdn-lfs-us-2.hf.co https://cdn-lfs-us-3.hf.co https://cdn-lfs-eu.hf.co https://cdn-lfs.asia.hf.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://xethub.hf.co https://raw.githubusercontent.com"
+  },
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
+    "https://www.chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://esm.sh/*",
+    "https://cdn.skypack.dev/*",
+    "https://huggingface.co/*",
+    "https://*.huggingface.co/*",
+    "https://cdn-lfs.huggingface.co/*",
+    "https://cdn-lfs-us-1.huggingface.co/*",
+    "https://cdn-lfs-us-1.hf.co/*",
+    "https://cdn-lfs-us-2.hf.co/*",
+    "https://cdn-lfs-us-3.hf.co/*",
+    "https://cdn-lfs-eu.hf.co/*",
+    "https://cdn-lfs.asia.hf.co/*",
+    "https://*.hf.co/*",
+    "https://cas-bridge.xethub.hf.co/*",
+    "https://xethub.hf.co/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["offscreen/*"],
+      "matches": ["<all_urls>"]
     }
-  }
+  ]
 }

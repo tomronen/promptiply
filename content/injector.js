@@ -161,7 +161,85 @@ function matchesHotkey(e, combo) {
     if (msg && msg.type === 'PR_TRIGGER_REFINE') {
       tryRefine(adapter);
     }
+    
+    // Listen for progress updates from local mode
+    if (msg && msg.type === 'PR_PROGRESS_UPDATE') {
+      updateProgress(msg.payload);
+    }
   });
+  
+  let currentProgress = null;
+  
+  function updateProgress(progress) {
+    currentProgress = progress;
+    const el = document.querySelector('.pr-overlay');
+    if (el && el.style.display !== 'none') {
+      // Update the overlay with progress
+      const body = el.querySelector('.pr-body');
+      if (body && progress) {
+        renderProgress(body, progress);
+      }
+    }
+  }
+  
+  function renderProgress(container, progress) {
+    container.innerHTML = '';
+    
+    const statusText = document.createElement('div');
+    statusText.style.marginBottom = '12px';
+    statusText.style.fontSize = '14px';
+    statusText.style.color = 'var(--pr-text)';
+    statusText.textContent = progress.message || 'Loading...';
+    container.appendChild(statusText);
+    
+    // Progress bar container
+    const progressContainer = document.createElement('div');
+    progressContainer.style.width = '100%';
+    progressContainer.style.height = '8px';
+    progressContainer.style.backgroundColor = 'var(--pr-bg)';
+    progressContainer.style.borderRadius = '4px';
+    progressContainer.style.overflow = 'hidden';
+    progressContainer.style.border = '1px solid var(--pr-border)';
+    
+    // Progress bar fill
+    const progressBar = document.createElement('div');
+    progressBar.style.height = '100%';
+    progressBar.style.backgroundColor = 'linear-gradient(90deg, var(--pr-accent), var(--pr-accent2))';
+    progressBar.style.background = 'linear-gradient(90deg, #7c3aed, #06b6d4)';
+    progressBar.style.transition = 'width 0.3s ease';
+    progressBar.style.width = `${Math.min(100, Math.max(0, progress.progress || 0))}%`;
+    progressBar.style.borderRadius = '4px';
+    
+    progressContainer.appendChild(progressBar);
+    container.appendChild(progressContainer);
+    
+    // Progress percentage text
+    if (progress.progress !== undefined && progress.progress > 0) {
+      const percentText = document.createElement('div');
+      percentText.style.marginTop = '8px';
+      percentText.style.fontSize = '12px';
+      percentText.style.color = 'var(--pr-muted)';
+      percentText.style.textAlign = 'center';
+      percentText.textContent = `${Math.round(progress.progress)}%`;
+      container.appendChild(percentText);
+    }
+    
+    // Stage indicator
+    if (progress.stage) {
+      const stageText = document.createElement('div');
+      stageText.style.marginTop = '4px';
+      stageText.style.fontSize = '11px';
+      stageText.style.color = 'var(--pr-muted)';
+      stageText.style.textAlign = 'center';
+      stageText.style.textTransform = 'capitalize';
+      stageText.textContent = progress.stage === 'downloading' ? 'Downloading model files...' :
+                             progress.stage === 'initializing' ? 'Initializing model...' :
+                             progress.stage === 'compiling' ? 'Compiling model...' :
+                             progress.stage === 'ready' ? 'Model ready' :
+                             progress.stage === 'error' ? 'Error occurred' : '';
+      container.appendChild(stageText);
+    }
+  }
 
   function detectSite() {
     const h = location.hostname;
@@ -219,11 +297,15 @@ function matchesHotkey(e, combo) {
     }
     try { console.log('[promptiply] Sending refinement request', { len: raw.length, preview: raw.slice(0,100) }); } catch(_) {}
 
+    // Reset progress for new refinement
+    currentProgress = null;
+    
     showOverlay({ status: 'working', original: raw });
 
     // Check if extension context is still valid
     if (!chrome.runtime || !chrome.runtime.id) {
       console.error('[promptiply] Extension context invalidated');
+      currentProgress = null;
       hideOverlay();
       showOverlay({ 
         status: 'draft', 
@@ -243,6 +325,7 @@ function matchesHotkey(e, combo) {
           } else {
             console.error('[promptiply] Extension error:', errMsg);
           }
+          currentProgress = null;
           hideOverlay();
           showOverlay({ 
             status: 'draft', 
@@ -253,10 +336,14 @@ function matchesHotkey(e, combo) {
           return;
         }
         try { console.log('[promptiply] Refinement response', res && { ok: res.ok, status: res.status, err: res.error, refinedLen: (res?.refined||'').length }); } catch(_) {}
+        // Clear progress when refinement completes
+        currentProgress = null;
         hideOverlay();
         if (!res || !res.ok) {
           const refined = raw; // fallback
-          showOverlay({ status: 'draft', refined, onApply: () => adapter.writeInput(refined) });
+          const errorMsg = res?.err || res?.error || 'Unknown error occurred';
+          console.error('[promptiply] Refinement failed:', errorMsg);
+          showOverlay({ status: 'draft', refined, error: errorMsg, onApply: () => adapter.writeInput(refined) });
           return;
         }
         if (res.status === 'ok') {
@@ -277,6 +364,7 @@ function matchesHotkey(e, combo) {
       } else {
         console.error('[promptiply] sendMessage error:', e);
       }
+      currentProgress = null;
       hideOverlay();
       showOverlay({ 
         status: 'draft', 
@@ -307,16 +395,21 @@ function matchesHotkey(e, combo) {
     actions.innerHTML = '';
 
     if (opts.status === 'working') {
-      body.textContent = 'Refining draft...';
-      const spinner = document.createElement('div');
-      spinner.style.width = '24px';
-      spinner.style.height = '24px';
-      spinner.style.border = '3px solid rgba(255,255,255,0.15)';
-      spinner.style.borderTopColor = '#7c3aed';
-      spinner.style.borderRadius = '999px';
-      spinner.style.marginTop = '8px';
-      spinner.style.animation = 'pr-spin 1s linear infinite';
-      body.appendChild(spinner);
+      // Check if we have progress info (for local mode)
+      if (currentProgress) {
+        renderProgress(body, currentProgress);
+      } else {
+        body.textContent = 'Refining draft...';
+        const spinner = document.createElement('div');
+        spinner.style.width = '24px';
+        spinner.style.height = '24px';
+        spinner.style.border = '3px solid rgba(255,255,255,0.15)';
+        spinner.style.borderTopColor = '#7c3aed';
+        spinner.style.borderRadius = '999px';
+        spinner.style.marginTop = '8px';
+        spinner.style.animation = 'pr-spin 1s linear infinite';
+        body.appendChild(spinner);
+      }
       const cancel = document.createElement('button');
       cancel.textContent = 'Close';
       cancel.addEventListener('click', hideOverlay);

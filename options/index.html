@@ -5,58 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>promptiply Settings</title>
   <link rel="icon" type="image/png" href="../icons/icon-48.png" />
-  <style>
-    :root { --bg:#0b1220; --panel:#0f172a; --muted:#94a3b8; --text:#e5e7eb; --accent:#7c3aed; --accent-2:#06b6d4; --border:#1e293b; }
-    * { box-sizing: border-box; }
-    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
-    .container { max-width: 980px; margin: 0 auto; padding: 24px; }
-    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-    .title { font-weight:800; font-size:20px; }
-    .tabs { display:flex; gap:8px; border-bottom:1px solid var(--border); margin-bottom:12px; }
-    .tab { padding: 10px 12px; cursor:pointer; border:1px solid var(--border); border-bottom:none; border-radius:10px 10px 0 0; background: #0b1220; color: var(--muted); transition: all .15s ease; }
-    .tab.active { background: var(--panel); color: var(--text); }
-    .panel { background: var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-    .row { display:flex; gap:10px; align-items:center; margin-bottom:12px; }
-    .field { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
-    label { font-size:12px; color: var(--muted); }
-    input[type=text], input[type=password], select, textarea { padding: 10px; width: 100%; border-radius:10px; background:#0b1220; color:var(--text); border:1px solid var(--border); transition: all .15s ease; }
-    input[type=text]:hover, input[type=password]:hover, select:hover, textarea:hover { border-color:#334155; }
-    input[type=text]:focus, input[type=password]:focus, select:focus, textarea:focus { outline:none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.25); }
-    textarea { min-height: 120px; }
-    .field.disabled, .field.disabled * { opacity:0.5; pointer-events:none; cursor:not-allowed; }
-    .actions { display:flex; gap:10px; }
-    button { padding:10px 12px; border-radius:10px; background:#0b1220; color:var(--text); border:1px solid var(--border); cursor:pointer; transition: all .15s ease; }
-    button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border:none; }
-    button:hover { filter: brightness(1.05); }
-    button:active { transform: translateY(1px); }
-    button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35); }
-    .muted { color: var(--muted); }
-    .list { display:flex; flex-direction:column; gap:10px; }
-    .item { display:flex; justify-content:space-between; align-items:center; padding:10px; border:1px solid var(--border); border-radius:10px; }
-    .card { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px; border:1px solid var(--border); border-radius:12px; background:#0b1220; }
-    .card .meta { display:flex; flex-direction:column; gap:4px; }
-    .chip { display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:2px 8px; border-radius:999px; background:#111827; border:1px solid var(--border); color:var(--muted); }
-    .empty { text-align:center; padding:24px; color:var(--muted); border:1px dashed var(--border); border-radius:12px; }
-    .hotkey-display { flex:1; padding:10px; border-radius:10px; background:#0b1220; border:1px solid var(--border); font-family:monospace; font-size:13px; color:var(--text); min-height:20px; display:flex; align-items:center; transition: all .15s ease; }
-    .hotkey-display:hover { border-color:#334155; }
-    .hotkey-display.recording { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.25); }
-    .hotkey-row { display:flex; align-items:center; gap:10px; }
-    .hotkey-hint { display:none; margin-top:8px; font-size:12px; color:var(--accent); }
-    .hotkey-hint.show { display:block; }
-    .modal { position: fixed; inset: 0; display:none; background: rgba(0,0,0,0.45); z-index: 2147483647; }
-    .modal .dialog { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:min(780px,92vw); background: var(--panel); border:1px solid var(--border); border-radius:16px; padding:16px; }
-    .steps { display:flex; gap:8px; margin-bottom:10px; }
-    .step { flex:1; text-align:center; padding:8px; border-radius:10px; background:#0b1220; color:var(--muted); border:1px solid var(--border); }
-    .step.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color:#fff; border:none; }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
   <script defer src="index.js"></script>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <div class="title" style="display:flex;align-items:center;gap:8px;">
-        <img src="../icons/icon-48.png" alt="promptiply" style="width:32px;height:32px;display:inline-block;" />
+      <div class="title title-flex">
+        <img src="../icons/icon-48.png" alt="promptiply" class="icon-48" />
         promptiply — Settings
       </div>
       <div class="muted">v0.1.0</div>
@@ -69,14 +25,15 @@
 
     <div class="panel" id="tab-general">
       <div class="grid">
-        <div class="field" style="margin-bottom:0;">
+        <div class="field field-no-margin">
           <label>Refinement Mode</label>
           <select id="mode">
             <option value="api">API (OpenAI/Anthropic)</option>
             <option value="webui">WebUI (use provider site)</option>
+            <option value="local">Local (Llama 3 via web-llm)</option>
           </select>
         </div>
-        <div class="field" style="margin-bottom:0;">
+        <div class="field field-no-margin">
           <label>Provider</label>
           <select id="provider">
             <option value="openai">OpenAI (ChatGPT)</option>
@@ -84,7 +41,7 @@
           </select>
         </div>
       </div>
-      <div class="field" style="width:100%;margin-top:12px;margin-bottom:0;">
+      <div class="field field-full field-top-margin">
         <label>Refine Hotkey</label>
         <div class="hotkey-row">
           <div id="refine-hotkey-display" class="hotkey-display">
@@ -96,50 +53,50 @@
           Press your desired key combination... (Press Escape to cancel)
         </div>
       </div>
-      <div class="actions" style="margin-top:24px;">
+      <div class="actions actions-top-margin">
         <button id="save-settings" class="primary">Save Settings</button>
       </div>
     </div>
 
-    <div class="panel" id="tab-providers" style="display:none">
+    <div class="panel tab-panel-hidden" id="tab-providers">
       <div class="grid">
         <div>
           <div class="field"><label>OpenAI API Key</label><input id="openai-key" type="password" placeholder="OpenAI API Key" /></div>
-          <div class="field" style="margin-bottom:0;"><label>OpenAI Model</label>
+          <div class="field field-no-margin"><label>OpenAI Model</label>
             <select id="openai-model-select">
               <option value="gpt-5-nano">gpt-5-nano</option>
               <option value="gpt-5-mini">gpt-5-mini</option>
               <option value="gpt-5">gpt-5</option>
               <option value="custom">Custom…</option>
             </select>
-            <input id="openai-model-custom" type="text" placeholder="Custom model id" style="display:none;margin-top:8px" />
+            <input id="openai-model-custom" type="text" placeholder="Custom model id" class="custom-input-hidden" />
           </div>
         </div>
         <div>
           <div class="field"><label>Anthropic API Key</label><input id="anthropic-key" type="password" placeholder="Anthropic API Key" /></div>
-          <div class="field" style="margin-bottom:0;"><label>Anthropic Model</label>
+          <div class="field field-no-margin"><label>Anthropic Model</label>
             <select id="anthropic-model-select">
               <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
               <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
               <option value="custom">Custom…</option>
             </select>
-            <input id="anthropic-model-custom" type="text" placeholder="Custom model id" style="display:none;margin-top:8px" />
+            <input id="anthropic-model-custom" type="text" placeholder="Custom model id" class="custom-input-hidden" />
           </div>
         </div>
       </div>
-      <div class="actions" style="margin-top:24px;">
+      <div class="actions actions-top-margin">
         <button id="save-providers-settings" class="primary">Save Settings</button>
       </div>
     </div>
 
-    <div class="panel" id="tab-profiles" style="display:none">
-      <div class="actions" style="justify-content:flex-end; margin-bottom:8px;">
+    <div class="panel tab-panel-hidden" id="tab-profiles">
+      <div class="actions actions-flex-end">
         <button id="new-profile" class="primary">New Profile</button>
       </div>
       <div id="profiles-list" class="list"></div>
     </div>
 
-    <p class="muted" style="margin-top:12px">Your API keys are stored locally on this device. Profiles sync across Chrome if enabled.</p>
+    <p class="muted muted-top-margin">Your API keys are stored locally on this device. Profiles sync across Chrome if enabled.</p>
     
     <!-- Profile Wizard Modal -->
     <div class="modal" id="profile-modal">
@@ -150,14 +107,14 @@
           <div class="step" data-step="3">Review</div>
         </div>
         <div id="wizard-body"></div>
-        <div class="actions" style="justify-content:space-between; margin-top:10px;">
+        <div class="actions actions-space-between actions-top-margin">
           <div>
             <button id="wizard-cancel">Cancel</button>
           </div>
           <div>
             <button id="wizard-back">Back</button>
             <button id="wizard-next" class="primary">Next</button>
-            <button id="wizard-save" class="primary" style="display:none;">Save</button>
+            <button id="wizard-save" class="primary wizard-save-hidden">Save</button>
           </div>
         </div>
       </div>

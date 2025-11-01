@@ -1,13 +1,65 @@
 // promptiply background service worker
+// Note: Service workers can't use ES6 imports, so we'll load the handler dynamically
+let activeRefinementTabId = null;
+let mlcEngineHandler = null;
+let ExtensionServiceWorkerMLCEngineHandler = null;
+
+// Load web-llm handler dynamically
+async function loadMLCHandler() {
+  if (ExtensionServiceWorkerMLCEngineHandler) {
+    return ExtensionServiceWorkerMLCEngineHandler;
+  }
+  
+  try {
+    console.log('[promptiply:bg] Loading web-llm handler...');
+    // Import the handler module dynamically
+    // Note: This won't work in service workers with ES6 imports, we'll use the offscreen approach instead
+    // The handler is loaded in the offscreen document
+    return null;
+  } catch (error) {
+    console.error('[promptiply:bg] Failed to load MLCEngineHandler:', error);
+    return null;
+  }
+}
+
+// Set up web-llm service worker handler connection
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'web_llm_service_worker') {
+    console.log('[promptiply:bg] Web-LLM service worker connection established');
+    // This will be handled by the offscreen document
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'PR_REFINEMENT_REQUEST') {
+    // Store the active tab ID for progress updates
+    if (sender?.tab?.id) {
+      activeRefinementTabId = sender.tab.id;
+    }
+    
     handleRefinement(msg.payload, sender).then((res) => {
+      activeRefinementTabId = null;
       sendResponse({ ok: true, status: 'ok', refined: res });
     }).catch((err) => {
+      activeRefinementTabId = null;
       console.error('[promptiply:bg] Refinement error:', err);
       sendResponse({ ok: false, err: String(err.message || err) });
     });
     return true; // Keep channel open for async response
+  }
+  
+  // Relay progress updates from offscreen to content script
+  if (msg && msg.type === 'PR_LOCAL_PROGRESS') {
+    if (activeRefinementTabId) {
+      chrome.tabs.sendMessage(activeRefinementTabId, {
+        type: 'PR_PROGRESS_UPDATE',
+        payload: msg.payload,
+      }).catch(() => {
+        // Ignore errors if tab is closed or content script not ready
+      });
+    }
+    // Don't send response for progress updates
+    return false;
   }
 });
 
@@ -75,6 +127,8 @@ async function handleRefinement(payload, sender) {
       throw new Error('Could not determine site for WebUI mode');
     }
     return await refineViaWebUI({ site, system, user });
+  } else if (mode === 'local') {
+    return await refineWithLocal({ system, user });
   } else {
     throw new Error(`Unknown mode: ${mode}`);
   }
@@ -989,11 +1043,28 @@ async function automateRefinement(site, composed) {
 }
 
 function buildSystemPrompt(profile) {
+  const baseSystemPrompt = `You are a prompt refinement assistant. Your job is to refine user prompts to make them clearer, more effective, and better structured while preserving their original intent completely.
+
+CRITICAL: The user will provide text that is a PROMPT TO BE REFINED, NOT a question to answer or request to fulfill.
+
+CRITICAL INSTRUCTIONS:
+1. Do NOT answer the user's prompt as if it's a question (e.g., if they say "I want to build a website", do NOT explain how to build a website)
+2. Do NOT provide information, help, or assistance about the topic
+3. ONLY refine the prompt itself to make it clearer, more detailed, and more effective
+4. Treat each request as INDEPENDENT - do not reference previous conversations
+5. Output ONLY the refined prompt text - no explanations, no prefixes like "Refined Prompt:", no conversational responses
+6. Preserve ALL the original details, parameters, requirements, and context from the input prompt
+7. Improve clarity, structure, and effectiveness while keeping the exact same intent
+8. If the original prompt is already good, make only minor improvements rather than rewriting it completely
+9. Start your response directly with the refined prompt - no introductory text
+10. Transform conversational prompts into clear, actionable prompts (e.g., "I want X" → "Provide a comprehensive guide/tutorial/explanation for X...")`;
+
   if (!profile) {
-    return 'You are a prompt refinement assistant. Refine prompts to make them clearer, more effective, and better structured while preserving their original intent.';
+    return baseSystemPrompt;
   }
   
-  const parts = ['You are a prompt refinement assistant. Refine prompts according to the following profile:'];
+  const parts = [baseSystemPrompt];
+  parts.push('\nAdditionally, refine prompts according to the following profile:');
   
   if (profile.persona) parts.push(`Target persona: ${profile.persona}`);
   if (profile.tone) parts.push(`Target tone: ${profile.tone}`);
@@ -1001,12 +1072,96 @@ function buildSystemPrompt(profile) {
     parts.push(`Style guidelines: ${profile.styleGuidelines.join('; ')}`);
   }
   
-  parts.push('Refine the user\'s prompt so that when used, it will generate responses that match the profile above. Preserve the original intent while improving clarity, structure, and effectiveness.');
+  parts.push('\nRefine the user\'s prompt so that when used, it will generate responses that match the profile above. Preserve the original intent while improving clarity, structure, and effectiveness.');
   
   return parts.join('\n');
 }
 
 function buildUserPrompt(prompt, profile) {
   return prompt;
+}
+
+// Local mode using web-llm
+async function ensureOffscreenDocument() {
+  // Check if offscreen document already exists
+  const clients = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+  });
+  
+  if (clients.length > 0) {
+    console.log('[promptiply:bg] Offscreen document already exists');
+    return;
+  }
+  
+  // Create offscreen document
+  // Note: We use DOM_SCRAPING reason as WEB_GPU is not available yet
+  // The offscreen document can still access WebGPU when needed
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen/index.html',
+      reasons: ['DOM_SCRAPING'],
+      justification: 'Offscreen document required for local LLM inference with web-llm (WebGPU support)',
+    });
+    console.log('[promptiply:bg] Offscreen document created');
+    
+    // Wait a bit for the offscreen document to initialize
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } catch (error) {
+    console.error('[promptiply:bg] Failed to create offscreen document:', error);
+    throw new Error(`Failed to create offscreen document: ${error.message}`);
+  }
+}
+
+async function refineWithLocal({ system, user }) {
+  try {
+    // Ensure offscreen document exists
+    await ensureOffscreenDocument();
+
+    console.log('[promptiply:bg] Sending refinement request to offscreen document');
+    console.log('[promptiply:bg] User prompt length:', user.length);
+    console.log('[promptiply:bg] User prompt preview:', user.substring(0, 200));
+    console.log('[promptiply:bg] System prompt length:', system.length);
+
+    // The offscreen document will send progress updates via PR_LOCAL_PROGRESS messages
+    // which we'll relay to the content script
+
+    // Send message to offscreen document
+    const response = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Local refinement timeout (60s)'));
+      }, 120000); // 120 second timeout (longer for initial model download)
+      
+      chrome.runtime.sendMessage(
+        {
+          type: 'PR_LOCAL_REFINE',
+          payload: {
+            systemPrompt: system,
+            userPrompt: user,
+          },
+        },
+        (response) => {
+          clearTimeout(timeout);
+          
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          
+          if (!response || !response.ok) {
+            reject(new Error(response?.error || 'Unknown error from offscreen document'));
+            return;
+          }
+          
+          resolve(response.refined);
+        }
+      );
+    });
+    
+    console.log('[promptiply:bg] Received refined prompt from local mode, length:', response.length);
+    return response;
+  } catch (error) {
+    console.error('[promptiply:bg] Local refinement error:', error);
+    throw error;
+  }
 }
 
