@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>promptiply Settings</title>
+  <style>
+    :root { --bg:#0b1220; --panel:#0f172a; --muted:#94a3b8; --text:#e5e7eb; --accent:#7c3aed; --accent-2:#06b6d4; --border:#1e293b; }
+    * { box-sizing: border-box; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+    .container { max-width: 980px; margin: 0 auto; padding: 24px; }
+    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .title { font-weight:800; font-size:20px; }
+    .tabs { display:flex; gap:8px; border-bottom:1px solid var(--border); margin-bottom:12px; }
+    .tab { padding: 10px 12px; cursor:pointer; border:1px solid var(--border); border-bottom:none; border-radius:10px 10px 0 0; background: #0b1220; color: var(--muted); transition: all .15s ease; }
+    .tab.active { background: var(--panel); color: var(--text); }
+    .panel { background: var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .row { display:flex; gap:10px; align-items:center; margin: 10px 0; }
+    .field { display:flex; flex-direction:column; gap:6px; }
+    label { font-size:12px; color: var(--muted); }
+    input[type=text], input[type=password], select, textarea { padding: 10px; width: 100%; border-radius:10px; background:#0b1220; color:var(--text); border:1px solid var(--border); transition: all .15s ease; }
+    input[type=text]:hover, input[type=password]:hover, select:hover, textarea:hover { border-color:#334155; }
+    input[type=text]:focus, input[type=password]:focus, select:focus, textarea:focus { outline:none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.25); }
+    textarea { min-height: 120px; }
+    .actions { display:flex; gap:10px; }
+    button { padding:10px 12px; border-radius:10px; background:#0b1220; color:var(--text); border:1px solid var(--border); cursor:pointer; transition: all .15s ease; }
+    button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border:none; }
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: translateY(1px); }
+    button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35); }
+    .muted { color: var(--muted); }
+    .list { display:flex; flex-direction:column; gap:10px; }
+    .item { display:flex; justify-content:space-between; align-items:center; padding:10px; border:1px solid var(--border); border-radius:10px; }
+    .card { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px; border:1px solid var(--border); border-radius:12px; background:#0b1220; }
+    .card .meta { display:flex; flex-direction:column; gap:4px; }
+    .chip { display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:2px 8px; border-radius:999px; background:#111827; border:1px solid var(--border); color:var(--muted); }
+    .empty { text-align:center; padding:24px; color:var(--muted); border:1px dashed var(--border); border-radius:12px; }
+    .modal { position: fixed; inset: 0; display:none; background: rgba(0,0,0,0.45); z-index: 2147483647; }
+    .modal .dialog { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:min(780px,92vw); background: var(--panel); border:1px solid var(--border); border-radius:16px; padding:16px; }
+    .steps { display:flex; gap:8px; margin-bottom:10px; }
+    .step { flex:1; text-align:center; padding:8px; border-radius:10px; background:#0b1220; color:var(--muted); border:1px solid var(--border); }
+    .step.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color:#fff; border:none; }
+  </style>
+  <script defer src="index.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">promptiply — Settings</div>
+      <div class="muted">v0.1.0</div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-tab="general">General</div>
+      <div class="tab" data-tab="providers">Providers</div>
+      <div class="tab" data-tab="profiles">Profiles</div>
+    </div>
+
+    <div class="panel" id="tab-general">
+      <div class="grid">
+        <div class="field">
+          <label>Refinement Mode</label>
+          <select id="mode">
+            <option value="api">API (OpenAI/Anthropic)</option>
+            <option value="webui">WebUI (use provider site)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Provider</label>
+          <select id="provider">
+            <option value="openai">OpenAI (ChatGPT)</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="width:100%">
+          <label>Refine Hotkey</label>
+          <input id="refine-hotkey" type="text" placeholder="e.g., Alt+R or Ctrl+Shift+R" />
+        </div>
+      </div>
+      <div class="actions">
+        <button id="save-settings" class="primary">Save Settings</button>
+      </div>
+    </div>
+
+    <div class="panel" id="tab-providers" style="display:none">
+      <div class="grid">
+        <div>
+          <div class="field"><label>OpenAI API Key</label><input id="openai-key" type="password" placeholder="OpenAI API Key" /></div>
+          <div class="field"><label>OpenAI Model</label>
+            <select id="openai-model-select">
+              <option value="gpt-5-nano">gpt-5-nano</option>
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="custom">Custom…</option>
+            </select>
+            <input id="openai-model-custom" type="text" placeholder="Custom model id" style="display:none;margin-top:8px" />
+          </div>
+        </div>
+        <div>
+          <div class="field"><label>Anthropic API Key</label><input id="anthropic-key" type="password" placeholder="Anthropic API Key" /></div>
+          <div class="field"><label>Anthropic Model</label>
+            <select id="anthropic-model-select">
+              <option value="claude-4.5-haiku">claude-4.5-haiku</option>
+              <option value="claude-4.5-sonnet">claude-4.5-sonnet</option>
+              <option value="custom">Custom…</option>
+            </select>
+            <input id="anthropic-model-custom" type="text" placeholder="Custom model id" style="display:none;margin-top:8px" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="tab-profiles" style="display:none">
+      <div class="actions" style="justify-content:flex-end; margin-bottom:8px;">
+        <button id="new-profile" class="primary">New Profile</button>
+      </div>
+      <div id="profiles-list" class="list"></div>
+    </div>
+
+    <p class="muted" style="margin-top:12px">Your API keys are stored locally on this device. Profiles sync across Chrome if enabled.</p>
+    
+    <!-- Profile Wizard Modal -->
+    <div class="modal" id="profile-modal">
+      <div class="dialog">
+        <div class="steps">
+          <div class="step" data-step="1">Basics</div>
+          <div class="step" data-step="2">Guidelines</div>
+          <div class="step" data-step="3">Review</div>
+        </div>
+        <div id="wizard-body"></div>
+        <div class="actions" style="justify-content:space-between; margin-top:10px;">
+          <div>
+            <button id="wizard-cancel">Cancel</button>
+          </div>
+          <div>
+            <button id="wizard-back">Back</button>
+            <button id="wizard-next" class="primary">Next</button>
+            <button id="wizard-save" class="primary" style="display:none;">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+

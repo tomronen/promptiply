@@ -1,0 +1,35 @@
+:root { --pr-bg:#0b1220; --pr-panel:#0f172a; --pr-muted:#94a3b8; --pr-text:#e5e7eb; --pr-accent:#7c3aed; --pr-accent2:#06b6d4; --pr-border:#1e293b; }
+
+.pr-inline-refine { background: linear-gradient(135deg, var(--pr-accent), var(--pr-accent2)); color:#fff; border:none; border-radius: 10px; padding: 6px 10px; font-size: 12px; cursor: pointer; transition: all .15s ease; }
+.pr-inline-refine:hover { filter: brightness(1.06); }
+.pr-inline-refine:active { transform: translateY(1px); }
+.pr-inline-refine:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35); }
+
+.pr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: none;
+  z-index: 2147483647;
+}
+
+.pr-card { position:absolute; top: 50%; left:50%; transform: translate(-50%, -50%); width:min(720px, 92vw); background: var(--pr-panel); color: var(--pr-text); border-radius: 16px; border:1px solid var(--pr-border); box-shadow: 0 20px 60px rgba(0,0,0,0.55); padding: 16px; }
+
+.pr-header { font-weight: 700; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center; }
+.pr-header::after { content: 'beta'; font-size: 11px; background: linear-gradient(135deg, var(--pr-accent), var(--pr-accent2)); padding:2px 8px; border-radius:999px; }
+
+.pr-body {
+  margin-bottom: 12px;
+}
+
+.pr-actions { display:flex; gap:10px; justify-content:flex-end; }
+
+.pr-actions button { background:#0b1220; color: var(--pr-text); border:1px solid var(--pr-border); border-radius:10px; padding:8px 10px; cursor:pointer; transition: all .15s ease; }
+.pr-actions button:hover { filter: brightness(1.05); }
+.pr-actions button:active { transform: translateY(1px); }
+.pr-actions button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35); }
+.pr-actions button:first-child { background: linear-gradient(135deg, var(--pr-accent), var(--pr-accent2)); border:none; }
+
+.pr-draft { width:100%; min-height:220px; background: var(--pr-bg); color: var(--pr-text); border:1px solid var(--pr-border); border-radius:12px; padding:12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+
