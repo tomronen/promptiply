@@ -594,6 +594,18 @@
   // Expose so popup or other pages can call it via scripting if needed
   try { window.startOnboarding = startOnboarding; } catch (_) {}
 
+  // Listen for runtime message to trigger onboarding (used by popup to reliably start it)
+  try {
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      try {
+        if (msg && msg.type === 'PR_START_ONBOARDING') {
+          startOnboarding();
+          sendResponse && sendResponse({ ok: true });
+        }
+      } catch (_) {}
+    });
+  } catch (_) {}
+
   // Draft save/load for onboarding so user can resume
   function saveOnboardingDraft() {
     if (!isOnboarding) return;
