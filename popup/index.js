@@ -11,6 +11,9 @@
   const $profile = document.getElementById('profile');
   const $openOptions = document.getElementById('open-options');
   const $runOnboard = document.getElementById('run-onboard');
+  const $onboardBanner = document.getElementById('onboard-banner');
+  const $onboardCTA = document.getElementById('onboard-cta');
+  const $onboardDismiss = document.getElementById('onboard-dismiss');
   const $hotkeyLabel = document.getElementById('hotkey-label');
   const $refineNow = document.getElementById('refine-now');
 
@@ -21,8 +24,14 @@
   });
 
   // Hide run-onboard if already onboarded
-  chrome.storage.local.get(['onboarded'], (d) => {
-    if (d && d.onboarded && $runOnboard) $runOnboard.style.display = 'none';
+  chrome.storage.local.get(['onboarded','onboardBannerDismissed'], (d) => {
+    const onboarded = !!(d && d.onboarded);
+    const dismissed = !!(d && d.onboardBannerDismissed);
+    if (onboarded && $runOnboard) $runOnboard.style.display = 'none';
+    // Show banner if not onboarded and not dismissed
+    if (!onboarded && !dismissed && $onboardBanner) {
+      $onboardBanner.style.display = 'block';
+    }
   });
 
   chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
@@ -69,6 +78,21 @@
       // fallback to options page
       if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
     });
+  });
+
+  // Banner CTA opens onboarding
+  $onboardCTA?.addEventListener('click', () => {
+    const url = chrome.runtime.getURL('options/index.html?onboard=1');
+    chrome.tabs.create({ url }).catch(() => { if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage(); });
+    // Optionally hide banner after clicking
+    try { $onboardBanner.style.display = 'none'; } catch(_) {}
+    chrome.storage.local.set({ onboardBannerDismissed: true });
+  });
+
+  // Dismiss button persists dismissal so banner won't reappear
+  $onboardDismiss?.addEventListener('click', () => {
+    try { $onboardBanner.style.display = 'none'; } catch(_) {}
+    chrome.storage.local.set({ onboardBannerDismissed: true });
   });
 
   $refineNow?.addEventListener('click', async () => {

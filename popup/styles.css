@@ -21,3 +21,10 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35
 .hots { display:flex; justify-content:space-between; align-items:center; border-top:1px dashed var(--border); margin-top:10px; padding-top:10px; }
 .icon-16 { width:16px; height:16px; display:inline-block; vertical-align:middle; }
 
+/* Onboarding banner */
+.onboard-banner { margin-bottom:12px; background: linear-gradient(90deg, rgba(124,58,237,0.06), rgba(6,182,212,0.03)); border:1px solid rgba(124,58,237,0.12); padding:10px; border-radius:10px; }
+.onboard-content { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.onboard-text { color:var(--text); font-size:13px; }
+.onboard-actions { display:flex; gap:8px; }
+.onboard-banner .secondary { background: transparent; border:1px solid rgba(255,255,255,0.06); }
+
