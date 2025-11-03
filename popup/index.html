@@ -11,47 +11,56 @@
 <body>
   <div class="container">
       <div class="header">
-      <div class="title">
-        <img src="../icons/icon-16.png" alt="promptiply" class="icon-16" />
-        promptiply <span class="badge">beta</span>
-      </div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <button id="run-onboard" class="secondary">Run Onboarding</button>
-        <button id="open-options" class="primary">Settings</button>
-      </div>
-    </div>
-      <!-- Onboarding discoverability banner (hidden by default) -->
-      <div id="onboard-banner" class="onboard-banner" style="display:none;">
-        <div class="onboard-content">
-          <div class="onboard-text">New here? Set up the extension in a few clicks.</div>
-          <div class="onboard-actions">
-            <button id="onboard-cta" class="primary">Get Started</button>
-            <button id="onboard-dismiss" class="secondary">Dismiss</button>
+      <!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>promptiply</title>
+        <link rel="icon" type="image/png" href="../icons/icon-48.png" />
+        <link rel="stylesheet" href="styles.css" />
+        <script defer src="index.js"></script>
+        </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="title">
+              <img src="../icons/icon-16.png" alt="promptiply" class="icon-16" />
+              promptiply <span class="badge">beta</span>
+            </div>
+            <button id="open-options" class="primary">Settings</button>
+          </div>
+
+          <div id="onboard-banner" class="banner" style="display:none;">
+            <div>New here? Set up the extension in a few clicks.</div>
+            <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+              <button id="onboard-cta" class="primary">Set up</button>
+              <button id="onboard-dismiss" class="secondary">Dismiss</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="grid">
+              <div class="field">
+                <label>Mode</label>
+                <select id="mode">
+                  <option value="api">API</option>
+                  <option value="webui">WebUI</option>
+                  <option value="local">Local (Llama 3)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Profile</label>
+                <select id="profile"></select>
+              </div>
+            </div>
+            <div class="hots">
+              <div class="muted">Press <span id="hotkey-label">Alt+T</span> to refine</div>
+              <button id="refine-now" class="primary">Refine Now</button>
+            </div>
           </div>
         </div>
-      </div>
-    <div class="panel">
-      <div class="grid">
-        <div class="field">
-          <label>Mode</label>
-          <select id="mode">
-            <option value="api">API</option>
-            <option value="webui">WebUI</option>
-            <option value="local">Local (Llama 3)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Profile</label>
-          <select id="profile"></select>
-        </div>
-      </div>
-      <div class="hots">
-        <div class="muted">Press <span id="hotkey-label">Alt+T</span> to refine</div>
-        <button id="refine-now" class="primary">Refine Now</button>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
+      </body>
+      </html>
 
 

@@ -79,6 +79,28 @@ try {
     try {
       if (details && details.reason === 'install') {
         console.log('[promptiply:bg] First install detected - opening onboarding');
+        // Create sensible default profile(s) in sync storage if none exist
+        try {
+          chrome.storage.sync.get(['profiles'], (data) => {
+            const existing = data && data.profiles;
+            if (!existing || !existing.list || existing.list.length === 0) {
+              const defaultProfile = {
+                id: 'default',
+                name: 'Default',
+                persona: 'General assistant',
+                instructions: 'Be concise, ask clarifying questions when needed.',
+                temperature: 0.2,
+              };
+              const payload = { list: [defaultProfile], activeProfileId: 'default' };
+              chrome.storage.sync.set({ profiles: payload }, () => {
+                console.log('[promptiply:bg] Default profile created on install');
+              });
+            }
+          });
+        } catch (e) {
+          console.warn('[promptiply:bg] Failed to create default profiles:', e);
+        }
+
         chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html?onboard=1') }).catch(() => {});
       }
     } catch (e) {

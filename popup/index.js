@@ -12,28 +12,27 @@
   const $openOptions = document.getElementById('open-options');
   const $runOnboard = document.getElementById('run-onboard');
   const $onboardBanner = document.getElementById('onboard-banner');
-  const $onboardCTA = document.getElementById('onboard-cta');
+  const $onboardCta = document.getElementById('onboard-cta');
   const $onboardDismiss = document.getElementById('onboard-dismiss');
   const $hotkeyLabel = document.getElementById('hotkey-label');
   const $refineNow = document.getElementById('refine-now');
 
+  // Load settings and show hotkey
   chrome.storage.local.get([STORAGE_SETTINGS], (data) => {
     const s = data[STORAGE_SETTINGS] || { mode: 'api' };
-    $mode.value = s.mode || 'api';
+    if ($mode) $mode.value = s.mode || 'api';
     if ($hotkeyLabel) $hotkeyLabel.textContent = s.refineHotkey || getDefaultHotkey();
   });
 
-  // Hide run-onboard if already onboarded
-  chrome.storage.local.get(['onboarded','onboardBannerDismissed'], (d) => {
-    const onboarded = !!(d && d.onboarded);
+  // Decide whether to show run-onboard button and banner
+  chrome.storage.local.get(['onboarding_completed','onboardBannerDismissed'], (d) => {
+    const onboarded = !!(d && d.onboarding_completed);
     const dismissed = !!(d && d.onboardBannerDismissed);
     if (onboarded && $runOnboard) $runOnboard.style.display = 'none';
-    // Show banner if not onboarded and not dismissed
-    if (!onboarded && !dismissed && $onboardBanner) {
-      $onboardBanner.style.display = 'block';
-    }
+    if (!onboarded && !dismissed && $onboardBanner) $onboardBanner.style.display = 'flex';
   });
 
+  // Load profiles and render
   chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
     const p = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
     renderProfiles(p);
@@ -45,12 +44,13 @@
     }
     if (area === 'local' && changes[STORAGE_SETTINGS]) {
       const s = changes[STORAGE_SETTINGS].newValue || { mode: 'api' };
-      $mode.value = s.mode || 'api';
+      if ($mode) $mode.value = s.mode || 'api';
       if ($hotkeyLabel) $hotkeyLabel.textContent = s.refineHotkey || getDefaultHotkey();
     }
   });
 
-  $mode.addEventListener('change', () => {
+  // Handlers
+  $mode?.addEventListener('change', () => {
     chrome.storage.local.get([STORAGE_SETTINGS], (data) => {
       const cur = data[STORAGE_SETTINGS] || {};
       cur.mode = $mode.value;
@@ -58,7 +58,7 @@
     });
   });
 
-  $profile.addEventListener('change', () => {
+  $profile?.addEventListener('change', () => {
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
       const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
       cur.activeProfileId = $profile.value || null;
@@ -66,107 +66,37 @@
     });
   });
 
-  $openOptions.addEventListener('click', () => {
+  $openOptions?.addEventListener('click', () => {
     if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
     else window.open('chrome://extensions/?options=' + chrome.runtime.id);
   });
 
-  $runOnboard?.addEventListener('click', async () => {
-    const onboardUrl = chrome.runtime.getURL('options/index.html?onboard=1');
+  // Open options and start onboarding (opens options with ?onboard=1)
+  async function openOptionsForOnboarding() {
+    const url = chrome.runtime.getURL('options/index.html?onboard=1');
     try {
-      // Try to find an existing options tab for this extension
-      const tabs = await chrome.tabs.query({});
-      const existing = tabs.find(t => t.url && (t.url === onboardUrl || t.url.includes('options/index.html')));
-      // Helper that triggers startOnboarding when tab is fully loaded
-      const triggerStartOnboardingInTab = (tabId) => {
-        try {
-          chrome.tabs.get(tabId, (t) => {
-            if (!t) return;
-            if (t.status === 'complete') {
-              try { chrome.scripting.executeScript({ target: { tabId }, func: () => { try { if (window.startOnboarding) window.startOnboarding(); } catch(_) {} } }); } catch(_) {}
-            } else {
-              const handler = (updatedTabId, changeInfo) => {
-                if (updatedTabId !== tabId) return;
-                if (changeInfo.status === 'complete') {
-                  try { chrome.scripting.executeScript({ target: { tabId }, func: () => { try { if (window.startOnboarding) window.startOnboarding(); } catch(_) {} } }); } catch(_) {}
-                  try { chrome.tabs.onUpdated.removeListener(handler); } catch(_) {}
-                }
-              };
-              chrome.tabs.onUpdated.addListener(handler);
-            }
-          });
-        } catch (_) {}
-      };
-
-      if (existing && existing.id) {
-        await chrome.tabs.update(existing.id, { active: true });
-        await chrome.windows.update(existing.windowId, { focused: true }).catch(()=>{});
-        triggerStartOnboardingInTab(existing.id);
-        try { chrome.runtime.sendMessage({ type: 'PR_START_ONBOARDING' }); } catch(_) {}
+      if (chrome.runtime.openOptionsPage) {
+        chrome.runtime.openOptionsPage();
+        // also create a tab pointing to the onboarding URL to be safe
+        chrome.tabs.create({ url, active: true });
       } else {
-        const created = await chrome.tabs.create({ url: onboardUrl });
-        const tabId = created?.id;
-        if (tabId) triggerStartOnboardingInTab(tabId);
-        try { chrome.runtime.sendMessage({ type: 'PR_START_ONBOARDING' }); } catch(_) {}
+        window.open(url);
       }
     } catch (e) {
-      // fallback
-      if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
+      try { window.open(url); } catch (_) {}
     }
-    // close popup to avoid stray open popup UI
-    try { window.close(); } catch(_) {}
-  });
-
-  // Banner CTA opens onboarding
-  $onboardCTA?.addEventListener('click', async () => {
-    const onboardUrl = chrome.runtime.getURL('options/index.html?onboard=1');
-    try {
-      const tabs = await chrome.tabs.query({});
-      const existing = tabs.find(t => t.url && (t.url === onboardUrl || t.url.includes('options/index.html')));
-      // reuse helper from above
-      const triggerStartOnboardingInTab = (tabId) => {
-        try {
-          chrome.tabs.get(tabId, (t) => {
-            if (!t) return;
-            if (t.status === 'complete') {
-              try { chrome.scripting.executeScript({ target: { tabId }, func: () => { try { if (window.startOnboarding) window.startOnboarding(); } catch(_) {} } }); } catch(_) {}
-            } else {
-              const handler = (updatedTabId, changeInfo) => {
-                if (updatedTabId !== tabId) return;
-                if (changeInfo.status === 'complete') {
-                  try { chrome.scripting.executeScript({ target: { tabId }, func: () => { try { if (window.startOnboarding) window.startOnboarding(); } catch(_) {} } }); } catch(_) {}
-                  try { chrome.tabs.onUpdated.removeListener(handler); } catch(_) {}
-                }
-              };
-              chrome.tabs.onUpdated.addListener(handler);
-            }
-          });
-        } catch (_) {}
-      };
-
-      if (existing && existing.id) {
-        await chrome.tabs.update(existing.id, { active: true });
-        await chrome.windows.update(existing.windowId, { focused: true }).catch(()=>{});
-        triggerStartOnboardingInTab(existing.id);
-        try { chrome.runtime.sendMessage({ type: 'PR_START_ONBOARDING' }); } catch(_) {}
-      } else {
-        const created = await chrome.tabs.create({ url: onboardUrl });
-        const tabId = created?.id;
-        if (tabId) triggerStartOnboardingInTab(tabId);
-        try { chrome.runtime.sendMessage({ type: 'PR_START_ONBOARDING' }); } catch(_) {}
-      }
-    } catch (e) {
-      if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
-    }
-    // Optionally hide banner after clicking and persist dismissal
-    try { $onboardBanner.style.display = 'none'; } catch(_) {}
+    // Hide banner and persist dismissal
+    if ($onboardBanner) $onboardBanner.style.display = 'none';
     chrome.storage.local.set({ onboardBannerDismissed: true });
     try { window.close(); } catch(_) {}
-  });
+  }
+
+  $runOnboard?.addEventListener('click', openOptionsForOnboarding);
+  $onboardCta?.addEventListener('click', openOptionsForOnboarding);
 
   // Dismiss button persists dismissal so banner won't reappear
   $onboardDismiss?.addEventListener('click', () => {
-    try { $onboardBanner.style.display = 'none'; } catch(_) {}
+    try { if ($onboardBanner) $onboardBanner.style.display = 'none'; } catch(_) {}
     chrome.storage.local.set({ onboardBannerDismissed: true });
   });
 
@@ -178,6 +108,7 @@
   });
 
   function renderProfiles(p) {
+    if (!$profile) return;
     $profile.innerHTML = '';
     const optNone = document.createElement('option');
     optNone.value = '';
@@ -191,6 +122,7 @@
     });
     if (p.activeProfileId) $profile.value = p.activeProfileId;
   }
+
 })();
 
 
