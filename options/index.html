@@ -15,7 +15,10 @@
         <img src="../icons/icon-48.png" alt="promptiply" class="icon-48" />
         promptiply — Settings
       </div>
-      <div class="muted" id="version">-</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="run-onboard-options" class="secondary">Run Onboarding</button>
+        <div class="muted" id="version">-</div>
+      </div>
     </div>
     <div class="tabs">
       <div class="tab active" data-tab="general">General</div>
@@ -101,6 +104,9 @@
     <!-- Profile Wizard Modal -->
     <div class="modal" id="profile-modal">
       <div class="dialog">
+        <div class="progress-wrap">
+          <div id="wizard-progress" class="wizard-progress"></div>
+        </div>
         <div class="steps">
           <div class="step" data-step="1">Basics</div>
           <div class="step" data-step="2">Guidelines</div>

@@ -39,6 +39,8 @@
     profiles: document.getElementById('tab-profiles')
   };
   const $version = document.getElementById('version');
+  const $runOnboardOptions = document.getElementById('run-onboard-options');
+  const $wizardProgress = document.getElementById('wizard-progress');
 
   function getDefaultHotkey() {
     const platform = navigator.platform.toLowerCase();
@@ -90,6 +92,9 @@
       setTimeout(() => startOnboarding(), 200);
     }
   } catch (_) {}
+
+  // Wire Run Onboarding button in options
+  $runOnboardOptions?.addEventListener('click', () => startOnboarding());
 
   // Load profiles
   chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
@@ -340,6 +345,19 @@
       return;
     }
 
+    // Special handling for onboarding step 2: save profile basics (name/persona/tone)
+    if (isOnboarding && wizardState.step === 2) {
+      const name = (document.getElementById('w-name')?.value || '').trim();
+      if (!name) return; // require a name to proceed
+      wizardState.name = name;
+      wizardState.persona = (document.getElementById('w-persona')?.value || '').trim();
+      wizardState.tone = (document.getElementById('w-tone')?.value || '').trim();
+      // Save draft
+      saveOnboardingDraft();
+      setWizardStep(wizardState.step + 1);
+      return;
+    }
+
     if (wizardState.step === 1) {
       const name = (document.getElementById('w-name').value || '').trim();
       if (!name) return;
@@ -487,6 +505,13 @@
     $wizardBack.classList.toggle('tab-panel-hidden', wizardState.step === 1);
     $wizardNext.classList.toggle('tab-panel-hidden', wizardState.step === 3);
     $wizardSave.classList.toggle('wizard-save-hidden', wizardState.step !== 3);
+    // Update progress bar if present
+    try {
+      if ($wizardProgress) {
+        const pct = Math.round((wizardState.step - 1) / (3 - 1) * 100);
+        $wizardProgress.style.width = pct + '%';
+      }
+    } catch (_) {}
     // If onboarding, present different step contents: step1 = modes + optional keys, step2 = profile basics, step3 = review
     if (isOnboarding) {
       if (wizardState.step === 1) {

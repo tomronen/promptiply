@@ -20,6 +20,11 @@
     if ($hotkeyLabel) $hotkeyLabel.textContent = s.refineHotkey || getDefaultHotkey();
   });
 
+  // Hide run-onboard if already onboarded
+  chrome.storage.local.get(['onboarded'], (d) => {
+    if (d && d.onboarded && $runOnboard) $runOnboard.style.display = 'none';
+  });
+
   chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
     const p = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
     renderProfiles(p);
