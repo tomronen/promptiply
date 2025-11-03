@@ -58,6 +58,7 @@
   }
 
   function updateProviderDisabled() {
+    if (!$mode || !$provider) return;
     const isWebUI = $mode.value === 'webui';
     const isLocal = $mode.value === 'local';
     const $providerField = $provider.closest('.field');
@@ -69,12 +70,12 @@
   // Load settings
   chrome.storage.local.get([STORAGE_SETTINGS], (data) => {
     const s = data[STORAGE_SETTINGS] || { mode: 'api' };
-    $mode.value = s.mode || 'api';
-    $provider.value = s.provider || (s.openaiKey ? 'openai' : (s.anthropicKey ? 'anthropic' : 'openai'));
-    $openaiKey.value = s.openaiKey || '';
-    setModelSelect($openaiModelSelect, $openaiModelCustom, s.openaiModel || 'gpt-5-nano');
-    $anthropicKey.value = s.anthropicKey || '';
-    setModelSelect($anthropicModelSelect, $anthropicModelCustom, s.anthropicModel || 'claude-haiku-4-5');
+    if ($mode) $mode.value = s.mode || 'api';
+    if ($provider) $provider.value = s.provider || (s.openaiKey ? 'openai' : (s.anthropicKey ? 'anthropic' : 'openai'));
+    if ($openaiKey) $openaiKey.value = s.openaiKey || '';
+    if ($openaiModelSelect && $openaiModelCustom) setModelSelect($openaiModelSelect, $openaiModelCustom, s.openaiModel || 'gpt-5-nano');
+    if ($anthropicKey) $anthropicKey.value = s.anthropicKey || '';
+    if ($anthropicModelSelect && $anthropicModelCustom) setModelSelect($anthropicModelSelect, $anthropicModelCustom, s.anthropicModel || 'claude-haiku-4-5');
     recordedHotkey = s.refineHotkey || getDefaultHotkey();
     updateHotkeyDisplay();
     updateProviderDisabled();
@@ -111,10 +112,10 @@
     }
   }
 
-  $saveSettings.addEventListener('click', saveSettings);
-  $saveProvidersSettings.addEventListener('click', saveSettings);
+  if ($saveSettings) $saveSettings.addEventListener('click', saveSettings);
+  if ($saveProvidersSettings) $saveProvidersSettings.addEventListener('click', saveSettings);
 
-  $mode.addEventListener('change', () => {
+  if ($mode) $mode.addEventListener('change', () => {
     updateProviderDisabled();
     chrome.storage.local.get([STORAGE_SETTINGS], (data) => {
       const cur = data[STORAGE_SETTINGS] || {};
@@ -145,25 +146,29 @@
     return selectEl.value === 'custom' ? (customEl.value.trim() || undefined) : selectEl.value;
   }
 
-  $openaiModelSelect.addEventListener('change', () => {
-    if ($openaiModelSelect.value === 'custom') {
-      $openaiModelCustom.classList.remove('custom-input-hidden');
-      $openaiModelCustom.focus();
-    } else {
-      $openaiModelCustom.classList.add('custom-input-hidden');
-      $openaiModelCustom.value = '';
-    }
-  });
+  if ($openaiModelSelect && $openaiModelCustom) {
+    $openaiModelSelect.addEventListener('change', () => {
+      if ($openaiModelSelect.value === 'custom') {
+        $openaiModelCustom.classList.remove('custom-input-hidden');
+        $openaiModelCustom.focus();
+      } else {
+        $openaiModelCustom.classList.add('custom-input-hidden');
+        $openaiModelCustom.value = '';
+      }
+    });
+  }
 
-  $anthropicModelSelect.addEventListener('change', () => {
-    if ($anthropicModelSelect.value === 'custom') {
-      $anthropicModelCustom.classList.remove('custom-input-hidden');
-      $anthropicModelCustom.focus();
-    } else {
-      $anthropicModelCustom.classList.add('custom-input-hidden');
-      $anthropicModelCustom.value = '';
-    }
-  });
+  if ($anthropicModelSelect && $anthropicModelCustom) {
+    $anthropicModelSelect.addEventListener('change', () => {
+      if ($anthropicModelSelect.value === 'custom') {
+        $anthropicModelCustom.classList.remove('custom-input-hidden');
+        $anthropicModelCustom.focus();
+      } else {
+        $anthropicModelCustom.classList.add('custom-input-hidden');
+        $anthropicModelCustom.value = '';
+      }
+    });
+  }
 
   function getDefaultHotkey() {
     const platform = navigator.platform.toLowerCase();
@@ -290,13 +295,15 @@
     }
   }
 
-  $refineHotkeyRecord.addEventListener('click', () => {
-    if (isRecordingHotkey) {
-      stopRecordingHotkey();
-    } else {
-      startRecordingHotkey();
-    }
-  });
+  if ($refineHotkeyRecord) {
+    $refineHotkeyRecord.addEventListener('click', () => {
+      if (isRecordingHotkey) {
+        stopRecordingHotkey();
+      } else {
+        startRecordingHotkey();
+      }
+    });
+  }
 
   // Wizard handlers
   $newProfile?.addEventListener('click', () => openWizard());
@@ -334,6 +341,7 @@
   });
 
   function renderProfiles(p) {
+    if (!$profilesList) return;
     $profilesList.innerHTML = '';
     if (!p.list.length) {
       const empty = document.createElement('div');
