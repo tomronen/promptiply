@@ -55,3 +55,8 @@ button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35)
 .wizard-save-hidden { display:none; }
 .tab-panel-hidden { display:none !important; }
 
+/* Wizard progress bar */
+.progress-wrap { height:6px; background: #071022; border-radius:6px; margin-bottom:10px; overflow:hidden; }
+.wizard-progress { height:100%; width:0%; background: linear-gradient(90deg, rgba(124,58,237,0.9), rgba(6,182,212,0.9)); transition: width 220ms ease; }
+.wizard-progress.animate { transition: width 420ms cubic-bezier(.2,.9,.2,1); }
+

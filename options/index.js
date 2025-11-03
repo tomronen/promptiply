@@ -348,8 +348,7 @@
     // Special handling for onboarding step 2: save profile basics (name/persona/tone)
     if (isOnboarding && wizardState.step === 2) {
       const name = (document.getElementById('w-name')?.value || '').trim();
-      if (!name) return; // require a name to proceed
-      wizardState.name = name;
+      wizardState.name = name || wizardState.name || '';
       wizardState.persona = (document.getElementById('w-persona')?.value || '').trim();
       wizardState.tone = (document.getElementById('w-tone')?.value || '').trim();
       // Save draft
