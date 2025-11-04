@@ -27,4 +27,6 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35
 .onboard-text { color:var(--text); font-size:13px; }
 .onboard-actions { display:flex; gap:8px; }
 .onboard-banner .secondary { background: transparent; border:1px solid rgba(255,255,255,0.06); }
+.banner-actions { margin-left:auto; display:flex; gap:8px; align-items:center; }
+.hidden { display:none !important; }
 

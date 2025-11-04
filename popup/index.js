@@ -28,8 +28,8 @@
   chrome.storage.local.get(['onboarding_completed','onboardBannerDismissed'], (d) => {
     const onboarded = !!(d && d.onboarding_completed);
     const dismissed = !!(d && d.onboardBannerDismissed);
-    if (onboarded && $runOnboard) $runOnboard.style.display = 'none';
-    if (!onboarded && !dismissed && $onboardBanner) $onboardBanner.style.display = 'flex';
+  if (onboarded && $runOnboard) $runOnboard.classList.add('hidden');
+  if (!onboarded && !dismissed && $onboardBanner) $onboardBanner.classList.remove('hidden');
   });
 
   // Load profiles and render
@@ -86,7 +86,7 @@
       try { window.open(url); } catch (_) {}
     }
     // Hide banner and persist dismissal
-    if ($onboardBanner) $onboardBanner.style.display = 'none';
+  if ($onboardBanner) $onboardBanner.classList.add('hidden');
     chrome.storage.local.set({ onboardBannerDismissed: true });
     try { window.close(); } catch(_) {}
   }
@@ -96,7 +96,7 @@
 
   // Dismiss button persists dismissal so banner won't reappear
   $onboardDismiss?.addEventListener('click', () => {
-    try { if ($onboardBanner) $onboardBanner.style.display = 'none'; } catch(_) {}
+  try { if ($onboardBanner) $onboardBanner.classList.add('hidden'); } catch(_) {}
     chrome.storage.local.set({ onboardBannerDismissed: true });
   });
 
