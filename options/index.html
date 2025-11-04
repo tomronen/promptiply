@@ -43,6 +43,23 @@
             <option value="anthropic">Anthropic (Claude)</option>
           </select>
         </div>
+        <div class="field field-no-margin" style="grid-column:1 / -1;">
+          <label>Analytics</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input id="analytics-optin" type="checkbox" />
+            <div class="muted">Help improve promptiply by sending anonymous local events (stored locally). No external network by default.</div>
+          </div>
+        </div>
+      </div>
+      <div class="field field-top-margin" id="analytics-debug">
+        <label>Analytics (debug)</label>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+          <button id="analytics-view" type="button">View Events</button>
+          <button id="analytics-export" type="button">Export JSON</button>
+          <button id="analytics-clear" type="button">Clear Events</button>
+          <div class="muted" id="analytics-count">0 events</div>
+        </div>
+        <pre id="analytics-list" style="display:none; max-height:220px; overflow:auto; background:#071022; padding:8px; border-radius:8px; border:1px solid var(--border);"></pre>
       </div>
       <div class="field field-full field-top-margin">
         <label>Refine Hotkey</label>
@@ -97,109 +114,15 @@
       <div class="actions actions-flex-end">
         <button id="new-profile" class="primary">New Profile</button>
       </div>
-  <div class="predefined-section predefined-section--spaced">
-        <div class="predefined-header">
-          <div class="predefined-title">Predefined profiles</div>
-          <div class="predefined-controls">
-            <button id="import-all-predefined">Import</button>
-            <button id="manage-predefined">Manage</button>
-            <button id="export-predefined">Export</button>
-            <button id="restore-predefined">Restore defaults</button>
-          </div>
-        </div>
-      
-        <div class="predefined-import-row">
-          <label class="predefined-import-label">Import JSON file:</label>
-          <input id="predefined-file" type="file" accept="application/json" class="hidden" />
-          <button id="predefined-file-choose">Choose File</button>
-          <span id="predefined-file-name" class="predefined-file-name">No file chosen</span>
-          <label class="predefined-import-label predefined-import-label--url">Or load from URL:</label>
-          <input id="predefined-url" type="text" placeholder="https://example.com/profiles.json" class="predefined-url-input" />
-          <button id="predefined-url-load">Load</button>
-          <button id="predefined-paste-json" title="Paste JSON">Paste JSON</button>
-          <span id="predefined-url-spinner" hidden class="predefined-spinner" role="status" aria-live="polite"><span class="spinner-inline" aria-hidden="true"></span></span>
+      <div class="predefined-section" style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-weight:700;">Predefined profiles</div>
+          <div><button id="import-all-predefined">Import all</button></div>
         </div>
         <div id="predefined-list" class="list"></div>
       </div>
       <div id="profiles-list" class="list"></div>
     </div>
-    <!-- Export selection modal (top-level) -->
-        <div class="modal" id="predefined-export-modal">
-      <div class="dialog">
-        <h3>Export profiles</h3>
-        <div id="predefined-export-list" class="predefined-export-list"></div>
-        <div class="dialog-actions">
-          <button id="predefined-export-all" class="secondary">Export All</button>
-          <button id="predefined-export-cancel">Cancel</button>
-          <button id="predefined-export-confirm" class="primary">Export selected</button>
-        </div>
-      </div>
-    </div>
-  <!-- Import selection modal (top-level) -->
-  <div class="modal" id="predefined-import-modal">
-    <div class="dialog">
-      <h3>Import predefined profiles</h3>
-  <div class="predefined-import-top">
-        <label><input type="radio" name="import-mode" value="replace"/> Replace current predefined list</label>
-        <label><input type="radio" name="import-mode" value="merge" checked/> Merge selected into current list</label>
-  <label class="predefined-import-selectall"><input type="checkbox" id="predefined-import-selectall"/> Select all</label>
-      </div>
-  <div id="predefined-import-list" class="predefined-import-list"></div>
-  <div class="dialog-actions">
-        <button id="predefined-import-cancel">Cancel</button>
-        <button id="predefined-import-confirm" class="primary">Import selected</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Paste JSON modal (replaces prompt-based paste) -->
-  <div class="modal" id="predefined-paste-modal">
-    <div class="dialog">
-      <h3>Paste predefined profiles JSON</h3>
-      <p class="muted">Paste the JSON content exported from promptiply. The importer will validate the structure before showing import options.</p>
-  <div class="predefined-paste-area">
-  <textarea id="predefined-paste-textarea" placeholder="Paste JSON here" class="predefined-paste-textarea"></textarea>
-  <div id="predefined-paste-error" class="predefined-paste-error"></div>
-      </div>
-  <div class="dialog-actions">
-        <button id="predefined-paste-cancel">Cancel</button>
-        <button id="predefined-paste-load" class="primary">Load and validate</button>
-      </div>
-    </div>
-  </div>
-    
-    <!-- Predefined manage modal -->
-    <div class="modal" id="predefined-modal">
-      <div class="dialog">
-        <h3>Manage predefined profiles</h3>
-  <div id="predefined-manage-list" class="predefined-manage-list"></div>
-  <div class="dialog-actions">
-          <button id="predefined-manage-cancel">Cancel</button>
-          <button id="predefined-manage-delete-selected">Delete selected</button>
-          <button id="predefined-manage-save" class="primary">Save</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Restore confirmation modal -->
-    <div class="modal" id="restore-modal">
-      <div class="dialog">
-        <h3>Restore predefined defaults</h3>
-        <p class="muted">Restoring defaults will replace the built-in predefined profile list. You can also choose to remove any profiles you previously imported from the predefined list. This will not affect profiles you created manually unless you choose to delete them below.</p>
-  <div class="restore-options-row">
-          <input id="restore-delete-imported" type="checkbox" />
-          <label for="restore-delete-imported">Also delete profiles imported from predefined list</label>
-        </div>
-  <div id="restore-preview" class="restore-preview"></div>
-  <div class="dialog-actions">
-          <button id="restore-cancel">Cancel</button>
-          <button id="restore-confirm" class="primary">Restore Defaults</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Toast container for in-UI notifications -->
-  <div id="toast-container" role="status" aria-live="polite" class="toast-root"></div>
 
     <p class="muted muted-top-margin">Your API keys are stored locally on this device. Profiles sync across Chrome if enabled.</p>
     

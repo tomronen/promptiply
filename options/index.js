@@ -6,232 +6,152 @@
   const ERROR_KEY = 'promptiply_onboarding_error';
   const STORAGE_ONBOARDING = 'onboarding_completed';
 
-  function safeSetStorage(key, value){
-    try{
-      if(window.chrome && chrome.storage && chrome.storage.local && chrome.storage.local.set){ const obj = {}; obj[key] = value; chrome.storage.local.set(obj); return; }
-    }catch(_){ }
-    try{ localStorage.setItem(key, JSON.stringify(value)); }catch(_){ }
+  // Elements
+  const $mode = document.getElementById('mode');
+  const $openaiKey = document.getElementById('openai-key');
+  const $openaiModelSelect = document.getElementById('openai-model-select');
+  const $openaiModelCustom = document.getElementById('openai-model-custom');
+  const $anthropicKey = document.getElementById('anthropic-key');
+  const $anthropicModelSelect = document.getElementById('anthropic-model-select');
+  const $anthropicModelCustom = document.getElementById('anthropic-model-custom');
+  const $provider = document.getElementById('provider');
+  const $refineHotkeyText = document.getElementById('refine-hotkey-text');
+  const $refineHotkeyDisplay = document.getElementById('refine-hotkey-display');
+  const $refineHotkeyRecord = document.getElementById('refine-hotkey-record');
+  const $refineHotkeyRecording = document.getElementById('refine-hotkey-recording');
+  const $saveSettings = document.getElementById('save-settings');
+  const $saveProvidersSettings = document.getElementById('save-providers-settings');
+
+  const $profilesList = document.getElementById('profiles-list');
+  const $newProfile = document.getElementById('new-profile');
+  const $profileModal = document.getElementById('profile-modal');
+  const $wizardBody = document.getElementById('wizard-body');
+  const $wizardCancel = document.getElementById('wizard-cancel');
+  const $wizardBack = document.getElementById('wizard-back');
+  const $wizardNext = document.getElementById('wizard-next');
+  const $wizardSave = document.getElementById('wizard-save');
+  const $wizardSteps = Array.from(document.querySelectorAll('#profile-modal .step'));
+
+  const $tabs = Array.from(document.querySelectorAll('.tab'));
+  const $tabPanels = {
+    general: document.getElementById('tab-general'),
+    providers: document.getElementById('tab-providers'),
+    profiles: document.getElementById('tab-profiles')
+  };
+  const $version = document.getElementById('version');
+
+  // Onboarding elements
+  const $onboardingModal = document.getElementById('onboarding-modal');
+  const $onboardingBody = document.getElementById('onboarding-body');
+  const $onboardingSkip = document.getElementById('onboarding-skip');
+  const $onboardingBack = document.getElementById('onboarding-back');
+  const $onboardingNext = document.getElementById('onboarding-next');
+  const $onboardingFinish = document.getElementById('onboarding-finish');
+  const $onboardingSteps = Array.from(document.querySelectorAll('#onboarding-modal .step'));
+  const $runOnboarding = document.getElementById('run-onboarding');
+
+  // State
+  let isRecordingHotkey = false;
+  let recordedHotkey = null;
+  let wizardState = { step: 1, editingId: null, name: '', persona: '', tone: '', guidelines: [] };
+  let onboardingState = { step: 1, selectedMode: 'api', selectedProvider: 'openai', apiKey: '', model: '', profileName: '', profilePersona: '', profileTone: '' };
+
+  // Predefined profiles (example set) - can be extended
+  const PREDEFINED_PROFILES = [
+    { id: 'builtin_writer', name: 'Technical Writer', persona: 'Senior Technical Writer', tone: 'clear, concise', styleGuidelines: ['Use simple language','Prefer examples','No fluff'] },
+    { id: 'builtin_dev', name: 'Dev Helper', persona: 'Senior Software Engineer', tone: 'concise, pragmatic', styleGuidelines: ['Show code samples','Explain with steps','Use bullet lists'] },
+    { id: 'builtin_marketing', name: 'Marketing Copy', persona: 'Conversion-focused Marketer', tone: 'excited, persuasive', styleGuidelines: ['Short headlines','Call to action','A/B test variants'] }
+  ];
+
+  // Utilities
+  function getDefaultHotkey() { const platform = navigator.platform.toLowerCase(); return platform.includes('mac') ? 'Ctrl+T' : 'Alt+T'; }
+  function capitalize(s){ return (s||'').charAt(0).toUpperCase() + (s||'').slice(1); }
+  function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function normalizeHotkey(v){
+    const t = (v||'').trim(); if(!t) return getDefaultHotkey();
+    const parts = t.split('+').map(x=>x.trim()).filter(Boolean);
+    const keyPart = parts.pop(); const mods = new Set(parts.map(p=>p.toLowerCase())); const order = [];
+    if(mods.has('ctrl')||mods.has('control')) order.push('Ctrl');
+    if(mods.has('alt')||mods.has('option')) order.push('Alt');
+    if(mods.has('shift')) order.push('Shift');
+    if(mods.has('meta')||mods.has('cmd')||mods.has('command')) order.push('Meta');
+    const key = (keyPart||'R').length===1 ? keyPart.toUpperCase() : capitalize(keyPart);
+    return [...order, key].join('+');
   }
 
-  function safeGetStorage(key, cb){
-    try{
-      if(window.chrome && chrome.storage && chrome.storage.local && chrome.storage.local.get){ return chrome.storage.local.get([key], cb||function(){}); }
-    }catch(_){ }
-    try{ const v = localStorage.getItem(key); cb && cb({ [key]: v ? JSON.parse(v) : undefined }); }catch(e){ cb && cb({}); }
+  function formatKeyEvent(e){
+    const parts = [];
+    if (e.ctrlKey) parts.push('Ctrl'); if (e.altKey) parts.push('Alt'); if (e.shiftKey) parts.push('Shift'); if (e.metaKey) parts.push('Meta');
+    let key = e.key; if(!key||key==='Unidentified') key = e.code?.replace(/^(Key|Digit)/,'')||'Unknown';
+    const keyMap = {' ':'Space','Enter':'Enter','Escape':'Escape','Tab':'Tab','Backspace':'Backspace','Delete':'Delete'};
+    if (keyMap[key]) key = keyMap[key]; else if (key.length===1) key = key.toUpperCase();
+    parts.push(key); return parts.join('+');
   }
 
-  function logOnboardingError(err, fnName, step){
-    try{
-      const payload = { message: err && err.message ? err.message : String(err), stack: err && err.stack ? err.stack : null, fn: fnName||null, step: step||null, ts: Date.now() };
-      safeSetStorage(ERROR_KEY, payload);
-      console.error('[promptiply] onboarding error', payload);
-    }catch(_){ }
+  // Tabs
+  $tabs.forEach(t=>t.addEventListener('click', ()=>selectTab(t.dataset.tab)));
+  function selectTab(name){ $tabs.forEach(t=>t.classList.toggle('active', t.dataset.tab===name)); Object.entries($tabPanels).forEach(([k,el])=>{ if(el){ el.classList.toggle('tab-panel-hidden', k!==name); } }); }
+
+  // Provider disabling
+  function updateProviderDisabled(){ if(!$mode||!$provider) return; const isWebUI = $mode.value==='webui'; const isLocal = $mode.value==='local'; const $providerField = $provider.closest('.field'); if($providerField) $providerField.classList.toggle('disabled', isWebUI||isLocal); }
+
+  // Model selectors
+  function setModelSelect(selectEl, customEl, value){ const opts = Array.from(selectEl.options).map(o=>o.value); if(value && opts.includes(value)){ selectEl.value = value; customEl.classList.add('custom-input-hidden'); customEl.value = ''; } else if(value){ selectEl.value = 'custom'; customEl.classList.remove('custom-input-hidden'); customEl.value = value; } else { selectEl.value = opts[0]; customEl.classList.add('custom-input-hidden'); customEl.value = ''; } }
+  function getModelValue(selectEl, customEl){ return selectEl.value==='custom' ? (customEl.value.trim()||undefined) : selectEl.value; }
+
+  // Load settings and profiles
+  chrome.storage.local.get([STORAGE_SETTINGS], (data)=>{
+    const s = data[STORAGE_SETTINGS]||{mode:'api'}; if($mode) $mode.value = s.mode||'api'; if($provider) $provider.value = s.provider||(s.openaiKey?'openai':(s.anthropicKey?'anthropic':'openai'));
+    if($openaiKey) $openaiKey.value = s.openaiKey||''; if($openaiModelSelect && $openaiModelCustom) setModelSelect($openaiModelSelect,$openaiModelCustom,s.openaiModel||'gpt-5-nano');
+    if($anthropicKey) $anthropicKey.value = s.anthropicKey||''; if($anthropicModelSelect && $anthropicModelCustom) setModelSelect($anthropicModelSelect,$anthropicModelCustom,s.anthropicModel||'claude-haiku-4-5');
+    recordedHotkey = s.refineHotkey || getDefaultHotkey(); updateHotkeyDisplay(); updateProviderDisabled();
+  });
+
+  chrome.storage.sync.get([STORAGE_PROFILES], (data)=>{ const p = data[STORAGE_PROFILES]||{list:[],activeProfileId:null}; renderProfiles(p); });
+  // Render built-in predefined profile list
+  renderPredefinedProfiles();
+
+  if($version && chrome.runtime?.getManifest){ const m = chrome.runtime.getManifest(); if(m?.version) $version.textContent = `v${m.version}`; }
+
+  function saveSettings(){ const s = { mode: $mode.value, provider: $provider.value, openaiKey: $openaiKey.value.trim()||undefined, openaiModel: getModelValue($openaiModelSelect,$openaiModelCustom), anthropicKey: $anthropicKey.value.trim()||undefined, anthropicModel: getModelValue($anthropicModelSelect,$anthropicModelCustom), refineHotkey: normalizeHotkey(recordedHotkey||getDefaultHotkey()) }; chrome.storage.local.set({[STORAGE_SETTINGS]:s}); if(recordedHotkey){ recordedHotkey = s.refineHotkey; updateHotkeyDisplay(); } }
+  if($saveSettings) $saveSettings.addEventListener('click', saveSettings); if($saveProvidersSettings) $saveProvidersSettings.addEventListener('click', saveSettings);
+  if($mode) $mode.addEventListener('change', ()=>{ updateProviderDisabled(); chrome.storage.local.get([STORAGE_SETTINGS], (data)=>{ const cur = data[STORAGE_SETTINGS]||{}; cur.mode = $mode.value; chrome.storage.local.set({[STORAGE_SETTINGS]:cur}); }); });
+
+  // Hotkey recording
+  function updateHotkeyDisplay(){ if($refineHotkeyText) $refineHotkeyText.textContent = recordedHotkey||getDefaultHotkey(); }
+  function startRecordingHotkey(){ if(isRecordingHotkey) return; isRecordingHotkey=true; if($refineHotkeyRecord) { $refineHotkeyRecord.textContent='Stop'; $refineHotkeyRecord.classList.add('primary'); } if($refineHotkeyRecording) $refineHotkeyRecording.classList.add('show'); if($refineHotkeyText) $refineHotkeyText.textContent='...'; if($refineHotkeyDisplay) $refineHotkeyDisplay.classList.add('recording');
+    const keyDownHandler = (e)=>{ e.preventDefault(); e.stopPropagation(); if(['Control','Alt','Shift','Meta'].includes(e.key)) return; const combo = formatKeyEvent(e); recordedHotkey = normalizeHotkey(combo); updateHotkeyDisplay(); stopRecordingHotkey(); };
+    const keyUpHandler = (e)=>{ if(e.key==='Escape') stopRecordingHotkey(); };
+    window.addEventListener('keydown', keyDownHandler, true); window.addEventListener('keyup', keyUpHandler, true); window._hotkeyRecorder = {keyDownHandler,keyUpHandler};
+  }
+  function stopRecordingHotkey(){ if(!isRecordingHotkey) return; isRecordingHotkey=false; if($refineHotkeyRecord){ $refineHotkeyRecord.textContent='Change'; $refineHotkeyRecord.classList.remove('primary'); } if($refineHotkeyRecording) $refineHotkeyRecording.classList.remove('show'); if($refineHotkeyDisplay) $refineHotkeyDisplay.classList.remove('recording'); updateHotkeyDisplay(); if(window._hotkeyRecorder){ window.removeEventListener('keydown', window._hotkeyRecorder.keyDownHandler, true); window.removeEventListener('keyup', window._hotkeyRecorder.keyUpHandler, true); delete window._hotkeyRecorder; } }
+  if($refineHotkeyRecord) $refineHotkeyRecord.addEventListener('click', ()=>{ if(isRecordingHotkey) stopRecordingHotkey(); else startRecordingHotkey(); });
+
+  // Wizard rendering & lifecycle
+  function renderProfiles(p){ if(!$profilesList) return; $profilesList.innerHTML = ''; if(!p.list.length){ const empty = document.createElement('div'); empty.className='empty'; empty.innerHTML = 'No profile, create new one? <br/><br/>'; const btn = document.createElement('button'); btn.className='primary'; btn.textContent='Create Profile'; btn.addEventListener('click', ()=>openWizard()); empty.appendChild(btn); $profilesList.appendChild(empty); return; } p.list.forEach(prof=>{ const card=document.createElement('div'); card.className='card'; const meta=document.createElement('div'); meta.className='meta'; const title=document.createElement('div'); title.textContent=prof.name; const line=document.createElement('div'); line.className='muted'; line.textContent=[prof.persona,prof.tone].filter(Boolean).join(' • '); const chips=document.createElement('div'); (prof.styleGuidelines||[]).slice(0,3).forEach(g=>{ const c=document.createElement('span'); c.className='chip'; c.textContent=g; chips.appendChild(c); }); meta.appendChild(title); meta.appendChild(line); meta.appendChild(chips); const actions=document.createElement('div'); const activate=document.createElement('button'); activate.textContent = p.activeProfileId===prof.id ? 'Active' : 'Set Active'; activate.addEventListener('click', ()=>{ const updated = {...p, activeProfileId: prof.id}; chrome.storage.sync.set({[STORAGE_PROFILES]: updated}, ()=>renderProfiles(updated)); }); const edit=document.createElement('button'); edit.textContent='Edit'; edit.addEventListener('click', ()=>openWizard(prof)); const del=document.createElement('button'); del.textContent='Delete'; del.addEventListener('click', ()=>{ const updated={...p, list: p.list.filter(x=>x.id!==prof.id)}; if(updated.activeProfileId===prof.id) updated.activeProfileId = updated.list[0]?.id||null; chrome.storage.sync.set({[STORAGE_PROFILES]: updated}, ()=>renderProfiles(updated)); }); actions.appendChild(activate); actions.appendChild(edit); actions.appendChild(del); card.appendChild(meta); card.appendChild(actions); $profilesList.appendChild(card); }); }
+
+  // Render predefined profiles UI
+  function renderPredefinedProfiles(){ const $pre = document.getElementById('predefined-list'); if(!$pre) return; $pre.innerHTML = ''; PREDEFINED_PROFILES.forEach(p=>{ const row = document.createElement('div'); row.className='card'; const meta = document.createElement('div'); meta.className='meta'; const title = document.createElement('div'); title.textContent = p.name; const line = document.createElement('div'); line.className='muted'; line.textContent = p.persona; meta.appendChild(title); meta.appendChild(line); const actions = document.createElement('div'); const useBtn = document.createElement('button'); useBtn.textContent = 'Use'; useBtn.addEventListener('click', ()=>importPredefinedProfile(p)); const importBtn = document.createElement('button'); importBtn.textContent = 'Import'; importBtn.addEventListener('click', ()=>importPredefinedProfile(p, { activate:false })); actions.appendChild(useBtn); actions.appendChild(importBtn); row.appendChild(meta); row.appendChild(actions); $pre.appendChild(row); });
+    const importAll = document.getElementById('import-all-predefined'); if(importAll){ importAll.addEventListener('click', importAllPredefined); }
   }
 
-  // Anchors
-  let $modal = null;
-  let $body = null;
-
-  function refresh(){
-    try{ $modal = document.getElementById('onboarding-modal'); }catch(_){ $modal = null; }
-    try{ $body = document.getElementById('onboarding-body'); }catch(_){ $body = null; }
+  // Import a predefined profile into storage (avoid id conflicts)
+  function importPredefinedProfile(pref, opts={ activate:true }){
+    chrome.storage.sync.get([STORAGE_PROFILES], (data)=>{
+      const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+      // If already exists by name, just activate or return
+      const exists = cur.list.find(x=>x.name===pref.name);
+      if(exists){ if(opts.activate){ cur.activeProfileId = exists.id; chrome.storage.sync.set({ [STORAGE_PROFILES]: cur }, ()=>{ renderProfiles(cur); }); } return; }
+      const id = `p_${Date.now()}_${Math.floor(Math.random()*9999)}`;
+      const newP = { id, name: pref.name, persona: pref.persona, tone: pref.tone||'', styleGuidelines: pref.styleGuidelines||[], constraints: [], examples: [], domainTags: [] };
+      cur.list.push(newP);
+      if(opts.activate && !cur.activeProfileId) cur.activeProfileId = newP.id;
+      chrome.storage.sync.set({ [STORAGE_PROFILES]: cur }, ()=>{ renderProfiles(cur); });
+    });
   }
 
-  function ensureAnchors(){
-    try{
-      refresh();
-      if(!$modal){ $modal = document.createElement('div'); $modal.id = 'onboarding-modal'; $modal.className = 'onboarding-modal'; document.body.appendChild($modal); }
-      if(!$body){ $body = document.createElement('div'); $body.id = 'onboarding-body'; $modal.appendChild($body); }
-    }catch(e){ logOnboardingError(e,'ensureAnchors'); }
-  }
-
-  const state = { step: 1 };
-
-  function render(){
-    try{
-      ensureAnchors();
-      if(!$body) return;
-      if(state.step === 1){
-        $body.innerHTML = '<h3>Welcome to Promptiply</h3><p>Choose a mode to get started.</p><div><button id="pp-mode-api">API</button> <button id="pp-mode-webui">WebUI</button> <button id="pp-mode-local">Local</button></div>';
-        document.getElementById('pp-mode-api')?.addEventListener('click', ()=>{ state.step = 2; render(); });
-        document.getElementById('pp-mode-webui')?.addEventListener('click', ()=>{ state.step = 2; render(); });
-        document.getElementById('pp-mode-local')?.addEventListener('click', ()=>{ state.step = 2; render(); });
-      } else if(state.step === 2){
-        $body.innerHTML = '<h3>Quick Setup</h3><p>Configure now or skip.</p><div><button id="pp-skip">Skip</button> <button id="pp-next">Next</button></div>';
-        document.getElementById('pp-next')?.addEventListener('click', ()=>{ state.step = 3; render(); });
-        document.getElementById('pp-skip')?.addEventListener('click', ()=>{ finish(); });
-      } else {
-        $body.innerHTML = '<h3>All set!</h3><p>You can change these later in Settings.</p><div><button id="pp-finish">Finish</button></div>';
-        document.getElementById('pp-finish')?.addEventListener('click', ()=>{ finish(); });
-      }
-    }catch(e){ logOnboardingError(e,'render', state.step); }
-  }
-
-  function open(){ try{ state.step = 1; ensureAnchors(); $modal.classList.add('modal-show'); render(); }catch(e){ logOnboardingError(e,'open'); } }
-  function close(){ try{ $modal && $modal.classList.remove('modal-show'); safeSetStorage(STORAGE_ONBOARDING, true); }catch(e){ logOnboardingError(e,'close'); } }
-  function finish(){ try{ safeSetStorage(STORAGE_ONBOARDING, true); close(); }catch(e){ logOnboardingError(e,'finish'); } }
-
-  function attach(){
-    try{
-      const btn = document.getElementById('run-onboarding');
-      if(btn && !btn.dataset._ppAttached){
-        btn.addEventListener('click', ()=>{
-          try{ safeSetStorage('promptiply_onboarding_click', { ts: Date.now() }); }catch(_){ }
-          try{ open(); }catch(e){ logOnboardingError(e,'attach_click'); }
-        });
-        try{ btn.dataset._ppAttached = '1'; }catch(_){ }
-        return true;
-      }
-    }catch(e){ logOnboardingError(e,'attach'); }
-    return false;
-  }
-
-  // Robust attach: immediate, DOMContentLoaded retry, delegated click fallback
-  try{
-    if(!attach()){
-      document.addEventListener('DOMContentLoaded', ()=>{ try{ attach(); }catch(_){ } });
-      if(!document._ppDelegated){
-        document.addEventListener('click', ev=>{
-          try{
-            const t = ev.target && ev.target.closest && ev.target.closest('#run-onboarding');
-            if(t){ try{ safeSetStorage('promptiply_onboarding_click', { ts: Date.now() }); }catch(_){ } try{ open(); }catch(e){ logOnboardingError(e,'delegate_click'); } }
-          }catch(_){ }
-        }, true);
-        try{ document._ppDelegated = true; }catch(_){ }
-      }
-    }
-  }catch(e){ logOnboardingError(e,'attach-flow'); }
-
-  // expose for testing
-  try{ window.openOnboardingWizard = open; window.setOnboardingStep = n=>{ state.step = n; render(); }; window.getOnboardingState = ()=>JSON.parse(JSON.stringify(state)); }catch(_){ }
-
-  // auto-open if never completed (non-blocking)
-  try{ safeGetStorage(STORAGE_ONBOARDING, (d)=>{ try{ const v = d && d[STORAGE_ONBOARDING]; if(!v) setTimeout(open, 700); }catch(_){ } }); }catch(_){ }
-
-})();
-              <p class="muted muted-top-margin muted-small">You can skip this step and set up your API key later in Settings.</p>
-            `;
-
-              const $obProvider = document.getElementById('ob-provider');
-              const $obOpenaiFields = document.getElementById('ob-openai-fields');
-              const $obAnthropicFields = document.getElementById('ob-anthropic-fields');
-
-              if($obProvider){
-                $obProvider.value = onboardingState.selectedProvider || 'openai';
-                $obOpenaiFields.classList.toggle('hidden', $obProvider.value !== 'openai');
-                $obAnthropicFields.classList.toggle('hidden', $obProvider.value !== 'anthropic');
-
-                $obProvider.addEventListener('change', () => {
-                  onboardingState.selectedProvider = $obProvider.value;
-                  $obOpenaiFields.classList.toggle('hidden', onboardingState.selectedProvider !== 'openai');
-                  $obAnthropicFields.classList.toggle('hidden', onboardingState.selectedProvider !== 'anthropic');
-                });
-                // Pre-select model options if onboardingState.model was set
-                const $obOpenaiModel = document.getElementById('ob-openai-model');
-                const $obAnthropicModel = document.getElementById('ob-anthropic-model');
-                if($obOpenaiModel && onboardingState.model) { Array.from($obOpenaiModel.options).forEach(o=>o.selected = (o.value===onboardingState.model)); }
-                if($obAnthropicModel && onboardingState.model) { Array.from($obAnthropicModel.options).forEach(o=>o.selected = (o.value===onboardingState.model)); }
-              }
-            } else if (onboardingState.selectedMode === 'webui'){
-              $onboardingBody.innerHTML = `
-              <div class="onboarding-section">
-                <h3>WebUI Mode Setup</h3>
-                <p>WebUI mode doesn't require any API keys. It works by opening a background tab to ChatGPT or Claude, sending your refinement request, and reading the response.</p>
-                <p>Make sure you're logged into ChatGPT or Claude in your browser. WebUI automation can be flaky; if you prefer reliability, use API or Local modes.</p>
-                <div class="field">
-                  <label>Preferred provider</label>
-                  <select id="ob-webui-provider">
-                    <option value="openai" ${onboardingState.selectedProvider === 'openai' ? 'selected' : ''}>OpenAI (ChatGPT)</option>
-                    <option value="anthropic" ${onboardingState.selectedProvider === 'anthropic' ? 'selected' : ''}>Anthropic (Claude)</option>
-                  </select>
-                </div>
-                <p class="muted muted-top-margin muted-small">You can switch modes later in Settings.</p>
-              </div>
-            `;
-
-            // Wire up the provider select for WebUI step
-            const $obWebuiProvider = document.getElementById('ob-webui-provider');
-            if ($obWebuiProvider) {
-              $obWebuiProvider.value = onboardingState.selectedProvider || 'openai';
-              $obWebuiProvider.addEventListener('change', () => {
-                onboardingState.selectedProvider = $obWebuiProvider.value;
-              });
-            }
-            }
-          });
-        }
-              $onboardingBody = document.getElementById('onboarding-body');
-              $onboardingSkip = document.getElementById('onboarding-skip');
-              $onboardingBack = document.getElementById('onboarding-back');
-              $onboardingNext = document.getElementById('onboarding-next');
-              $onboardingFinish = document.getElementById('onboarding-finish');
-              $onboardingSteps = Array.from(document.querySelectorAll('.onboarding-step')) || [];
-            }catch(_){ }
-          }
-
-          function safeRender(name, fn){
-            try{
-              refreshOnboardingAnchors();
-              if(!$onboardingBody){
-                const modal = document.getElementById('onboarding-modal') || document.createElement('div');
-                if(!modal.parentElement) document.body.appendChild(modal);
-                const div = document.createElement('div'); div.id = 'onboarding-body'; modal.appendChild(div);
-                $onboardingBody = div;
-              }
-              return fn();
-            }catch(e){ console.error('[promptiply] onboarding render failed', name, e); try{ logOnboardingError(e, name); }catch(_){ } }
-          }
-
-          function openOnboardingWizard(){ onboardingState = { step:1, selectedMode:'api', selectedProvider:'openai', apiKey:'', model:'', profileName:'', profilePersona:'', profileTone:'' }; refreshOnboardingAnchors(); $onboardingModal?.classList.add('modal-show'); setOnboardingStep(1); }
-          function closeOnboardingWizard(){ refreshOnboardingAnchors(); $onboardingModal?.classList.remove('modal-show'); try{ chrome.storage.local.set({ [STORAGE_ONBOARDING]: true }); }catch(_){ } }
-
-          function setOnboardingStep(step){ try{ onboardingState.step = Math.max(1, Math.min(4, step)); refreshOnboardingAnchors(); $onboardingSteps.forEach(s=>s.classList.toggle('active', Number(s.dataset.step)===onboardingState.step)); $onboardingBack?.classList.toggle('tab-panel-hidden', onboardingState.step===1); $onboardingNext?.classList.toggle('tab-panel-hidden', onboardingState.step===4); $onboardingFinish?.classList.toggle('wizard-save-hidden', onboardingState.step!==4); if(onboardingState.step===1) renderModesStep(); else if(onboardingState.step===2) renderSetupStep(); else if(onboardingState.step===3) renderProfileStep(); else renderSuccessStep(); }catch(e){ logOnboardingError(e, 'setOnboardingStep', step); } }
-
-          function renderModesStep(){ return safeRender('renderModesStep', ()=>{ if(!$onboardingBody) return; $onboardingBody.innerHTML = `
-            <div class="onboarding-section">
-              <h3>Choose Your Refinement Mode</h3>
-              <p>promptiply offers three ways to refine your prompts. Choose the one that fits your needs:</p>
-            </div>
-            <div class="mode-card ${onboardingState.selectedMode === 'api' ? 'selected' : ''}" data-mode="api" tabindex="0">
-              <h3>API Mode</h3>
-              <p>Uses your OpenAI or Anthropic API key for fast, reliable refinement.</p>
-            </div>
-            <div class="mode-card ${onboardingState.selectedMode === 'webui' ? 'selected' : ''}" data-mode="webui" tabindex="0">
-              <h3>WebUI Mode</h3>
-              <p>No API key required. Uses browser automation to interact with ChatGPT/Claude.</p>
-            </div>
-            <div class="mode-card ${onboardingState.selectedMode === 'local' ? 'selected' : ''}" data-mode="local" tabindex="0">
-              <h3>Local Mode</h3>
-              <p>Run models locally for private inference.</p>
-            </div>
-          `; Array.from($onboardingBody.querySelectorAll('.mode-card')).forEach(card=>{ card.addEventListener('click', ()=>{ onboardingState.selectedMode = card.dataset.mode; Array.from($onboardingBody.querySelectorAll('.mode-card')).forEach(c=>c.classList.remove('selected')); card.classList.add('selected'); }); card.addEventListener('keydown', ev=>{ if(ev.key==='Enter' || ev.key===' ') { ev.preventDefault(); card.click(); } }); }); }); }
-
-          function renderSetupStep(){ return safeRender('renderSetupStep', ()=>{ if(!$onboardingBody) return; if(onboardingState.selectedMode==='api'){ $onboardingBody.innerHTML = `<div class="onboarding-section"><h3>API Setup</h3><p>Enter API key in Settings later.</p></div><div class="actions"><button id="ob-skip">Skip</button><button id="ob-next">Next</button></div>`; } else { $onboardingBody.innerHTML = `<div class="onboarding-section"><h3>Setup</h3><p>No setup required for this mode.</p></div><div class="actions"><button id="ob-next">Next</button></div>`; } setTimeout(()=>{ document.getElementById('ob-next')?.addEventListener('click', ()=>setOnboardingStep(onboardingState.step+1)); document.getElementById('ob-skip')?.addEventListener('click', ()=>closeOnboardingWizard()); },10); }); }
-
-          function renderProfileStep(){ return safeRender('renderProfileStep', ()=>{ if(!$onboardingBody) return; $onboardingBody.innerHTML = `<div class="onboarding-section"><h3>Create Profile (optional)</h3><p>Add a profile to tailor refinements.</p></div><div class="field"><label>Name</label><input id="ob-profile-name" type="text" value="${escapeHtml(onboardingState.profileName||'')}" /></div><div class="actions"><button id="ob-prev">Back</button><button id="ob-next">Next</button></div>`; setTimeout(()=>{ document.getElementById('ob-next')?.addEventListener('click', ()=>{ const n = document.getElementById('ob-profile-name'); if(n) onboardingState.profileName = n.value.trim(); setOnboardingStep(onboardingState.step+1); }); document.getElementById('ob-prev')?.addEventListener('click', ()=>setOnboardingStep(onboardingState.step-1)); },10); }); }
-
-          function renderSuccessStep(){ return safeRender('renderSuccessStep', ()=>{ if(!$onboardingBody) return; $onboardingBody.innerHTML = `<div class="onboarding-success"><h3>You're All Set!</h3><p>Finish to save these settings.</p></div><div class="actions"><button id="ob-finish">Finish</button></div>`; setTimeout(()=>{ document.getElementById('ob-finish')?.addEventListener('click', ()=>{ try{ chrome.storage.local.set({ [STORAGE_ONBOARDING]: true }); }catch(_){ } closeOnboardingWizard(); setTimeout(()=>location.reload(),300); }); },10); }); }
-
-          // Delegated run-onboarding binding (robust against timing)
-          (function bindRunOnboarding(){ function attach(){ const btn = document.getElementById('run-onboarding'); if(!btn) return false; if(btn.dataset && btn.dataset.prOnboardingAttached) return true; const wrapper = ()=>{ try{ if(typeof openOnboardingWizard==='function') return openOnboardingWizard(); if(typeof window.startOnboarding==='function') return window.startOnboarding(); const m=document.getElementById('onboarding-modal'); if(m) m.classList.add('modal-show'); if(typeof setOnboardingStep==='function') return setOnboardingStep(1); }catch(e){ console.warn('[promptiply] run-onboarding wrapper failed', e); try{ logOnboardingError(e,'runOnboardingWrapper'); }catch(_){ } } }; btn.addEventListener('click', wrapper); try{ if(btn.dataset) btn.dataset.prOnboardingAttached='1'; }catch(_){ } return true; } if(attach()) return; document.addEventListener('DOMContentLoaded', ()=>{ try{ attach(); }catch(_){ } }); try{ const mo=new MutationObserver((m,obs)=>{ if(attach()) obs.disconnect(); }); mo.observe(document.documentElement||document.body, { childList:true, subtree:true }); setTimeout(()=>mo.disconnect(),5000); }catch(_){ } // delegated click
-            if(!document._prOnboardingDelegated){ document.addEventListener('click', ev=>{ try{ const t = ev.target && ev.target.closest && ev.target.closest('#run-onboarding'); if(t){ try{ chrome && chrome.storage && chrome.storage.local && chrome.storage.local.set && chrome.storage.local.set({ promptiply_onboarding_click: { timestamp: Date.now() } }); }catch(_){ try{ localStorage.setItem('promptiply_onboarding_click', JSON.stringify({ timestamp: Date.now() })); }catch(__){} } if(typeof openOnboardingWizard==='function') return openOnboardingWizard(); if(typeof window.startOnboarding==='function') return window.startOnboarding(); if(typeof setOnboardingStep==='function') return setOnboardingStep(1); } }catch(_){ } }, true); try{ document._prOnboardingDelegated = true; }catch(_){ } }
-          })();
-
-          try{ window.openOnboardingWizard = openOnboardingWizard; window.setOnboardingStep = setOnboardingStep; window.getOnboardingState = ()=>onboardingState; }catch(_){ }
-    if (deleteSelectedBtn) {
-      deleteSelectedBtn.addEventListener('click', () => {
-        const checked = Array.from(list.querySelectorAll('.m-select:checked')).map(cb => Number(cb.dataset.idx)).filter(n => !Number.isNaN(n));
-        if (!checked.length) {
-          showToast('No profiles selected', 'error');
-          return;
-        }
-        PREDEFINED_PROFILES = PREDEFINED_PROFILES.filter((_, i) => !checked.includes(i));
-        openManagePredefined();
-        renderPredefinedProfiles();
-        showToast(`Deleted ${checked.length} profiles`);
-      });
-    }
-  }
+  function importAllPredefined(){ PREDEFINED_PROFILES.forEach(p=> importPredefinedProfile(p,{ activate:false })); }
 
   function openWizard(existing){ wizardState = { step:1, editingId: existing?.id||null, name: existing?.name||'', persona: existing?.persona||'', tone: existing?.tone||'', guidelines: existing?.styleGuidelines||[] }; try{ $onboardingModal?.classList.remove('modal-show'); } catch(_){} $profileModal?.classList.add('modal-show'); setWizardStep(1); }
   function closeWizard(){ $profileModal?.classList.remove('modal-show'); }

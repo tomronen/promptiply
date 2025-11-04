@@ -79,17 +79,8 @@ button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35)
 .field .hint { font-size:12px; color:var(--muted); margin-top:6px; }
 .field.invalid input, .field.invalid textarea { border-color: #ff6b6b; box-shadow: 0 0 0 3px rgba(255,107,107,0.12); }
 
-/* Toasts: polished UI, icons and transitions */
-#toast-container { display:flex; flex-direction:column-reverse; align-items:flex-end; gap:8px; }
-#toast-container .toast { pointer-events:auto; background: linear-gradient(180deg, rgba(11,18,32,0.95), rgba(13,20,36,0.95)); color: var(--text); border:1px solid var(--border); padding:10px 14px; border-radius:10px; box-shadow: 0 8px 30px rgba(2,6,23,0.6); min-width:260px; display:flex; gap:10px; align-items:flex-start; transform-origin:100% 100%; opacity:0; transform: translateY(8px) scale(.985); transition: transform .26s cubic-bezier(.2,.9,.2,1), opacity .26s ease; }
-#toast-container .toast.show { opacity:1; transform: translateY(0) scale(1); }
-#toast-container .toast.exit { opacity:0; transform: translateY(8px) scale(.98); transition: transform .18s ease, opacity .18s ease; }
-#toast-container .toast .icon { width:20px; height:20px; flex:0 0 20px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; }
-#toast-container .toast.success .icon { background: #064e3b; color:#86efac; }
-#toast-container .toast.error .icon { background: #7f1d1d; color:#fecaca; }
-#toast-container .toast .content { flex:1; }
-#toast-container .toast .title { font-weight:700; margin-bottom:6px; }
-#toast-container .toast .subtitle { font-size:12px; color:var(--muted); }
+/* Analytics debug panel */
+#analytics-list { font-family: monospace; font-size:12px; color:var(--muted); }
 
 /* Example profile chips in onboarding */
 .example-chips { display:flex; gap:8px; margin-top:8px; }
@@ -122,80 +113,4 @@ button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35)
 .onboarding-success .icon-48 { width: 64px; height: 64px; margin-bottom: 16px; }
 .onboarding-success h3 { margin: 0 0 12px 0; font-size: 20px; font-weight: 700; }
 .onboarding-success p { color: var(--muted); line-height: 1.6; margin: 0; }
-
-/* Onboarding hint and paste-error helper */
-.onboarding-hint { margin-top:8px; background: rgba(124,58,237,0.08); padding:8px 10px; border-radius:8px; color: var(--accent); font-weight:600; }
-.paste-error { color: #fecaca; margin-top:6px; font-size:13px; }
-
-/* Toast notifications */
-#toast-container .toast { pointer-events:auto; background: #0b1220; color: var(--text); border:1px solid var(--border); padding:10px 14px; border-radius:10px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); margin-top:8px; min-width:220px; }
-#toast-container .toast.success { border-color: #16a34a; }
-#toast-container .toast.error { border-color: #dc2626; }
-#toast-container .toast .title { font-weight:700; margin-bottom:6px; }
-
-/* Small inline spinner */
-.spinner-inline { display:inline-block; width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,0.08); border-top-color: var(--accent); animation: spin 800ms linear infinite; vertical-align:middle; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Manage modal field layout */
-#predefined-manage-list > div { display:flex; gap:8px; align-items:center; }
-#predefined-manage-list input[type=text] { padding:8px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text); }
-#predefined-manage-list textarea { min-height:60px; border-radius:8px; padding:8px; border:1px solid var(--border); background:transparent; color:var(--text); }
-
-/* Utility classes used by JS instead of inline styles to satisfy CSP */
-.hidden { display: none !important; }
-.header-controls { display:flex; gap:8px; align-items:center; }
-.predefined-section--spaced { margin-bottom:14px; }
-.predefined-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-.predefined-title { font-weight:700; }
-.predefined-controls { display:flex; gap:8px; align-items:center; }
-.predefined-import-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
-.predefined-import-label { font-size:12px; color:var(--muted); }
-.predefined-import-label--url { margin-left:12px; }
-.predefined-file-name { margin-left:8px; color:var(--muted); font-size:13px; }
-.predefined-url-input { width:320px; }
-.predefined-spinner { margin-left:8px; }
-.predefined-export-list { max-height:320px; overflow:auto; margin-top:12px; }
-.dialog-actions { display:flex; justify-content:flex-end; margin-top:12px; gap:8px; }
-.predefined-import-top { margin-top:8px; display:flex; align-items:center; gap:12px; }
-.predefined-import-selectall { margin-left:auto; }
-.predefined-import-list { max-height:320px; overflow:auto; margin-top:12px; }
-.predefined-paste-area { margin-top:8px; }
-.predefined-paste-textarea { width:100%; height:200px; font-family: monospace; }
-.predefined-paste-error { color:#b00020; margin-top:6px; display:none; font-size:13px; }
-.predefined-manage-list { margin-top:12px; }
-.restore-options-row { margin-top:12px; display:flex; gap:8px; align-items:center; }
-.restore-preview { margin-top:12px; color:var(--muted); font-size:13px; }
-.toast-root { position:fixed; right:12px; bottom:12px; z-index:99999; pointer-events:none; }
-.profile-wizard-title { font-weight:700; }
-.import-row { display:flex; align-items:center; padding:6px 4px; }
-.import-row-label { flex: 1; display:flex; align-items:center; gap:8px; }
-.import-persona { color: #94a3b8; margin-left:6px; font-size:12px; }
-.export-row { display:flex; align-items:center; gap:8px; padding:6px 0; }
-.export-label { margin-left:6px; }
-.m-guides { width:100%; height:56px; resize:vertical; }
-.m-guides.expanded { height:160px; }
-.m-showmore { margin-top:4px; }
-.guide-wrap { display:flex; flex-direction:column; }
-.manage-add-row { margin-top:8px; display:flex; justify-content:flex-start; }
-.toast-undo { margin-left:8px; }
-
-.debug-duplicate-banner {
-	background: #ffcc00;
-	color: #000;
-	padding: 8px 12px;
-	position: fixed;
-	top: 8px;
-	right: 8px;
-	z-index: 9999;
-	border-radius: 6px;
-	box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-
-/* Small utilities used by onboarding templates (avoid inline styles) */
-.muted-small { font-size:12px; margin-top:12px; }
-.mb-12 { margin-bottom:12px; }
-.mt-24 { margin-top:24px; }
-.onboarding-summary { text-align:left; margin:24px auto; max-width:400px; }
-
 
