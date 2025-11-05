@@ -195,19 +195,46 @@ button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35)
   gap: 16px;
 }
 
-.file-input-wrapper {
-  position: relative;
+.file-input-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 8px;
 }
 
-.file-input-wrapper input[type="file"] {
-  cursor: pointer;
+.file-input-hidden {
+  display: none;
 }
 
-#import-file-name {
-  display: block;
-  margin-top: 8px;
+.file-select-button {
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+#import-file-display {
+  display: inline-block;
   font-style: italic;
+}
+
+.url-input-container {
+  width: 100%;
+}
+
+.url-input-field {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg-secondary);
+  color: var(--text);
+  transition: border-color 0.2s;
+}
+
+.url-input-field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
 }
 
 .undo-toast-button {

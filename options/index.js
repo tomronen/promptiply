@@ -918,13 +918,17 @@
       const confirmBtn = document.getElementById('restore-confirm');
       
       if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => {
+        cancelBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           modal.remove();
         });
       }
       
       if (confirmBtn) {
-        confirmBtn.addEventListener('click', () => {
+        confirmBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           modal.remove();
           restoreDefaults(customProfiles);
         });
@@ -1097,24 +1101,31 @@
       const executeBtn = document.getElementById('export-execute');
       
       if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => {
+        cancelBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           modal.remove();
         });
       }
       
       if (executeBtn) {
-        executeBtn.addEventListener('click', () => {
+        executeBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           const selectedIds = Array.from(modal.querySelectorAll('.export-profile-item input[type="checkbox"]:checked'))
             .map(cb => cb.value);
           
           if (selectedIds.length === 0) {
+            const existingError = modal.querySelector('.export-error-message');
+            if (existingError) existingError.remove();
+            
             const statusEl = document.createElement('p');
-            statusEl.className = 'muted modal-text-muted-small';
+            statusEl.className = 'muted modal-text-muted-small export-error-message';
             statusEl.textContent = 'Please select at least one profile to export';
             statusEl.style.color = '#f44336';
             statusEl.style.marginTop = '12px';
             const actionsDiv = modal.querySelector('.actions');
-            if (actionsDiv) {
+            if (actionsDiv && actionsDiv.parentNode) {
               actionsDiv.parentNode.insertBefore(statusEl, actionsDiv);
             }
             return;
@@ -1128,7 +1139,9 @@
           const a = document.createElement('a');
           a.href = url;
           a.download = `promptiply-profiles-${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
           a.click();
+          document.body.removeChild(a);
           URL.revokeObjectURL(url);
           
           modal.remove();
@@ -1156,139 +1169,160 @@
           <p>Choose how you want to import profiles:</p>
           
           <div class="field">
-            <label for="import-file">Select File</label>
-            <div class="file-input-wrapper">
-              <input id="import-file" type="file" accept=".json" aria-describedby="import-file-hint" />
-              <span id="import-file-name" class="muted modal-hint-text">No file selected</span>
+            <label for="import-file-input">Select File</label>
+            <div class="file-input-container">
+              <input id="import-file-input" type="file" accept=".json" class="file-input-hidden" aria-describedby="import-file-hint-text" />
+              <button type="button" id="import-file-button" class="secondary file-select-button">Choose File</button>
+              <span id="import-file-display" class="muted modal-hint-text">No file selected</span>
             </div>
-            <div id="import-file-hint" class="muted modal-hint-text">Choose a JSON file from your computer</div>
+            <div id="import-file-hint-text" class="muted modal-hint-text">Choose a JSON file from your computer</div>
           </div>
           
           <div class="modal-text-center">— or —</div>
           
           <div class="field">
-            <label for="import-url">Load from URL</label>
-            <input id="import-url" type="url" placeholder="https://example.com/profiles.json" aria-describedby="import-url-hint" />
-            <div id="import-url-hint" class="muted modal-hint-text">Enter a URL to a JSON file (must support CORS)</div>
+            <label for="import-url-input">Load from URL</label>
+            <div class="url-input-container">
+              <input id="import-url-input" type="url" placeholder="https://example.com/profiles.json" aria-describedby="import-url-hint-text" class="url-input-field" />
+            </div>
+            <div id="import-url-hint-text" class="muted modal-hint-text">Enter a URL to a JSON file (must support CORS)</div>
           </div>
           
           <div class="modal-text-center">— or —</div>
           
           <div class="field">
-            <label for="import-json">Paste JSON</label>
-            <textarea id="import-json" class="modal-textarea-mono" placeholder='{"schemaVersion":1,"profiles":[...]}' aria-describedby="import-json-hint"></textarea>
-            <div id="import-json-hint" class="muted modal-hint-text">Paste your profile data in JSON format</div>
+            <label for="import-json-textarea">Paste JSON</label>
+            <textarea id="import-json-textarea" class="modal-textarea-mono" placeholder='{"schemaVersion":1,"profiles":[...]}' aria-describedby="import-json-hint-text"></textarea>
+            <div id="import-json-hint-text" class="muted modal-hint-text">Paste your profile data in JSON format</div>
           </div>
           
-          <div id="import-status" role="status" aria-live="polite" class="modal-status-box"></div>
+          <div id="import-status-display" role="status" aria-live="polite" class="modal-status-box"></div>
         </div>
         <div class="actions actions-space-between actions-top-margin">
-          <button id="import-cancel">Cancel</button>
-          <button id="import-execute" class="primary">Import</button>
+          <button type="button" id="import-cancel-btn">Cancel</button>
+          <button type="button" id="import-execute-btn" class="primary">Import</button>
         </div>
       </div>
     `;
     
     document.body.appendChild(modal);
     
-    // Focus first input
-    setTimeout(() => document.getElementById('import-url')?.focus(), 100);
+    // File input button handler
+    const fileButton = document.getElementById('import-file-button');
+    const fileInput = document.getElementById('import-file-input');
+    const fileDisplay = document.getElementById('import-file-display');
     
-    // Wire up buttons
-    const cancelBtn = document.getElementById('import-cancel');
-    const executeBtn = document.getElementById('import-execute');
-    
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => {
-        modal.remove();
+    if (fileButton && fileInput) {
+      fileButton.addEventListener('click', () => {
+        fileInput.click();
       });
-    }
-    
-    if (executeBtn) {
-      executeBtn.addEventListener('click', () => {
-        executeImport(modal);
-      });
-    }
-    
-    // URL input handler
-    const urlInput = document.getElementById('import-url');
-    if (urlInput) {
-      urlInput.addEventListener('input', (e) => {
-        if (e.target.value.trim()) {
-          const fileInput = document.getElementById('import-file');
-          const jsonInput = document.getElementById('import-json');
-          if (fileInput) fileInput.value = '';
+      
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          const urlInput = document.getElementById('import-url-input');
+          const jsonInput = document.getElementById('import-json-textarea');
+          if (urlInput) urlInput.value = '';
           if (jsonInput) jsonInput.value = '';
+          if (fileDisplay) {
+            fileDisplay.textContent = e.target.files[0].name;
+            fileDisplay.style.color = 'var(--text)';
+            fileDisplay.style.fontWeight = '500';
+          }
+        } else {
+          if (fileDisplay) {
+            fileDisplay.textContent = 'No file selected';
+            fileDisplay.style.color = '';
+            fileDisplay.style.fontWeight = '';
+          }
         }
       });
     }
     
-    // File input handler
-    const fileInput = document.getElementById('import-file');
-    const fileNameDisplay = document.getElementById('import-file-name');
-    if (fileInput) {
-      fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-          const urlInput = document.getElementById('import-url');
-          const jsonInput = document.getElementById('import-json');
-          if (urlInput) urlInput.value = '';
+    // URL input handler
+    const urlInput = document.getElementById('import-url-input');
+    if (urlInput) {
+      urlInput.addEventListener('input', (e) => {
+        if (e.target.value.trim()) {
+          if (fileInput) fileInput.value = '';
+          if (fileDisplay) {
+            fileDisplay.textContent = 'No file selected';
+            fileDisplay.style.color = '';
+            fileDisplay.style.fontWeight = '';
+          }
+          const jsonInput = document.getElementById('import-json-textarea');
           if (jsonInput) jsonInput.value = '';
-          if (fileNameDisplay) {
-            fileNameDisplay.textContent = e.target.files[0].name;
-            fileNameDisplay.style.color = 'var(--text)';
-          }
-        } else {
-          if (fileNameDisplay) {
-            fileNameDisplay.textContent = 'No file selected';
-            fileNameDisplay.style.color = '';
-          }
         }
       });
     }
     
     // JSON textarea handler
-    const jsonInput = document.getElementById('import-json');
+    const jsonInput = document.getElementById('import-json-textarea');
     if (jsonInput) {
       jsonInput.addEventListener('input', (e) => {
         if (e.target.value.trim()) {
-          const urlInput = document.getElementById('import-url');
-          const fileInput = document.getElementById('import-file');
           if (urlInput) urlInput.value = '';
           if (fileInput) fileInput.value = '';
+          if (fileDisplay) {
+            fileDisplay.textContent = 'No file selected';
+            fileDisplay.style.color = '';
+            fileDisplay.style.fontWeight = '';
+          }
         }
+      });
+    }
+    
+    // Wire up buttons
+    const cancelBtn = document.getElementById('import-cancel-btn');
+    const executeBtn = document.getElementById('import-execute-btn');
+    
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        modal.remove();
+      });
+    }
+    
+    if (executeBtn) {
+      executeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        executeImport(modal);
       });
     }
   }
 
   function executeImport(modal) {
-    const urlInput = document.getElementById('import-url');
-    const fileInput = document.getElementById('import-file');
-    const jsonInput = document.getElementById('import-json');
-    const statusEl = document.getElementById('import-status');
+    const urlInput = document.getElementById('import-url-input');
+    const fileInput = document.getElementById('import-file-input');
+    const jsonInput = document.getElementById('import-json-textarea');
+    const statusEl = document.getElementById('import-status-display');
     
-    statusEl.textContent = '';
-    statusEl.className = '';
+    if (statusEl) {
+      statusEl.textContent = '';
+      statusEl.className = 'modal-status-box';
+    }
     
     // Try URL first
-    if (urlInput.value.trim()) {
+    if (urlInput && urlInput.value.trim()) {
       importFromURL(urlInput.value.trim(), statusEl, modal);
       return;
     }
     
     // Try file
-    if (fileInput.files.length > 0) {
+    if (fileInput && fileInput.files.length > 0) {
       importFromFile(fileInput.files[0], statusEl, modal);
       return;
     }
     
     // Try JSON
-    if (jsonInput.value.trim()) {
+    if (jsonInput && jsonInput.value.trim()) {
       importFromJSON(jsonInput.value.trim(), statusEl, modal);
       return;
     }
     
-    statusEl.textContent = 'Please provide a URL, file, or JSON data';
-    statusEl.style.color = '#f44336';
+    if (statusEl) {
+      statusEl.textContent = 'Please provide a URL, file, or JSON data';
+      statusEl.style.color = '#f44336';
+    }
   }
 
   function importFromURL(url, statusEl, modal) {

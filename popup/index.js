@@ -75,8 +75,15 @@
   async function openOptionsForOnboarding() {
     const url = chrome.runtime.getURL('options/index.html?onboard=1');
     try {
-      // Only create one tab
-      chrome.tabs.create({ url, active: true });
+      // Check if options page is already open
+      const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL('options/index.html*') });
+      if (tabs.length > 0) {
+        // Update existing tab with onboard parameter and focus it
+        await chrome.tabs.update(tabs[0].id, { url, active: true });
+      } else {
+        // Create new tab only if options page isn't open
+        await chrome.tabs.create({ url, active: true });
+      }
     } catch (e) {
       try { window.open(url); } catch (_) {}
     }
