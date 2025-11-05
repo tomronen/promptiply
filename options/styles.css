@@ -154,3 +154,124 @@ button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35)
   font-weight: 700;
 }
 
+/* Modal inline styles to fix CSP violations */
+.modal-list-container {
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 16px 0;
+}
+
+.modal-card-compact {
+  padding: 8px 12px;
+  margin: 4px 0;
+}
+
+.modal-text-muted-small {
+  font-size: 12px;
+}
+
+.modal-text-center {
+  text-align: center;
+  margin: 12px 0;
+}
+
+.modal-status-box {
+  margin-top: 12px;
+  min-height: 20px;
+}
+
+.modal-textarea-mono {
+  font-family: monospace;
+  min-height: 100px;
+}
+
+.modal-hint-text {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.import-modal-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.undo-toast-button {
+  margin-left: 12px;
+  padding: 4px 8px;
+  background: #fff;
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.undo-toast-button:hover {
+  background: #e5e7eb;
+}
+
+/* Export selection UI */
+.export-selection-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #0b1220;
+}
+
+.export-profile-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.export-profile-item:last-child {
+  border-bottom: none;
+}
+
+.export-profile-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.export-profile-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.export-select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: var(--panel);
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.button.secondary {
+  background: #1e293b;
+  border: 1px solid var(--border);
+}
+
+/* Toast styles */
+.toast-undo {
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-top: 6px;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+}
+

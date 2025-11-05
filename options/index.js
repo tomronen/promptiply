@@ -857,13 +857,25 @@
       if (opts.activate && !cur.activeProfileId) cur.activeProfileId = newP.id;
       chrome.storage.sync.set({ [STORAGE_PROFILES]: cur }, () => {
         renderProfiles(cur);
-        showToast(`Imported "${pref.name}"`);
+        if (!opts.silent) showToast(`Imported "${pref.name}"`);
       });
     });
   }
 
-  function importAllPredefined() {
-    PREDEFINED_PROFILES.forEach((p) => importPredefinedProfile(p, { activate: false }));
+  // Auto-import predefined profiles on first load
+  function autoImportPredefinedProfiles() {
+    chrome.storage.local.get(['predefined_profiles_imported'], (data) => {
+      if (!data.predefined_profiles_imported) {
+        console.log('[promptiply] First load - auto-importing predefined profiles');
+        PREDEFINED_PROFILES.forEach((p, index) => {
+          // Delay each import slightly to avoid race conditions
+          setTimeout(() => {
+            importPredefinedProfile(p, { activate: index === 0, silent: true });
+          }, index * 100);
+        });
+        chrome.storage.local.set({ predefined_profiles_imported: true });
+      }
+    });
   }
 
   // Restore Defaults with confirmation and undo
@@ -889,11 +901,11 @@
           </div>
           <div class="onboarding-section">
             <p>This will remove <strong>${toDelete.length}</strong> imported predefined profile(s):</p>
-            <div class="list" style="max-height: 200px; overflow-y: auto; margin: 16px 0;">
+            <div class="list modal-list-container">
               ${toDelete.map(p => `
-                <div class="card" style="padding: 8px 12px; margin: 4px 0;">
+                <div class="card modal-card-compact">
                   <div><strong>${escapeHtml(p.name)}</strong></div>
-                  <div class="muted" style="font-size: 12px;">${escapeHtml(p.persona || '')}</div>
+                  <div class="muted modal-text-muted-small">${escapeHtml(p.persona || '')}</div>
                 </div>
               `).join('')}
             </div>
@@ -909,14 +921,21 @@
       document.body.appendChild(modal);
       
       // Wire up buttons
-      document.getElementById('restore-cancel').addEventListener('click', () => {
-        modal.remove();
-      });
+      const cancelBtn = document.getElementById('restore-cancel');
+      const confirmBtn = document.getElementById('restore-confirm');
       
-      document.getElementById('restore-confirm').addEventListener('click', () => {
-        modal.remove();
-        restoreDefaults(toDelete);
-      });
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+          modal.remove();
+        });
+      }
+      
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', () => {
+          modal.remove();
+          restoreDefaults(toDelete);
+        });
+      }
     });
   }
 
@@ -956,25 +975,19 @@
     el.setAttribute('aria-live', 'polite');
     el.innerHTML = `
       <span>Removed ${count} profile(s)</span>
-      <button id="undo-restore" style="margin-left: 12px; padding: 4px 8px; background: #fff; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Undo</button>
+      <button id="undo-restore" class="undo-toast-button">Undo</button>
     `;
-    el.style.background = 'rgba(0,0,0,0.85)';
-    el.style.color = '#fff';
-    el.style.padding = '12px 16px';
-    el.style.borderRadius = '6px';
-    el.style.marginTop = '6px';
-    el.style.fontSize = '14px';
-    el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.4)';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
     
     container.appendChild(el);
     
     // Wire up undo button
-    document.getElementById('undo-restore').addEventListener('click', () => {
-      undoRestore();
-      el.remove();
-    });
+    const undoBtn = document.getElementById('undo-restore');
+    if (undoBtn) {
+      undoBtn.addEventListener('click', () => {
+        undoRestore();
+        el.remove();
+      });
+    }
     
     // Auto-remove after 10 seconds
     undoTimeout = setTimeout(() => {
@@ -1014,21 +1027,108 @@
     }
   }
 
-  // Export profiles
+  // Export profiles with selection
   function exportProfiles() {
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
       const profiles = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
-      const envelope = createExportEnvelope(profiles.list);
-      const json = JSON.stringify(envelope, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `promptiply-profiles-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('Profiles exported');
-      console.log('[promptiply] Exported', profiles.list.length, 'profiles');
+      
+      if (profiles.list.length === 0) {
+        showToast('No profiles to export');
+        return;
+      }
+      
+      // Show export modal with selection
+      const modal = document.createElement('div');
+      modal.className = 'modal modal-show';
+      modal.id = 'export-modal';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-labelledby', 'export-modal-title');
+      modal.innerHTML = `
+        <div class="dialog">
+          <div class="title-flex">
+            <img src="../icons/icon-48.png" alt="promptiply" class="icon-48" />
+            <div id="export-modal-title">Export Profiles</div>
+          </div>
+          <div class="onboarding-section">
+            <p>Select profiles to export:</p>
+            <div class="export-select-all">
+              <input type="checkbox" id="export-select-all-checkbox" checked />
+              <label for="export-select-all-checkbox">Select All</label>
+            </div>
+            <div class="export-selection-list">
+              ${profiles.list.map(p => `
+                <div class="export-profile-item">
+                  <input type="checkbox" id="export-profile-${p.id}" value="${p.id}" checked />
+                  <label for="export-profile-${p.id}" class="export-profile-info">
+                    <div><strong>${escapeHtml(p.name)}</strong></div>
+                    <div class="muted modal-text-muted-small">${escapeHtml(p.persona || '')}</div>
+                  </label>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div class="actions actions-space-between actions-top-margin">
+            <button id="export-cancel">Cancel</button>
+            <button id="export-execute" class="primary">Export Selected</button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Handle select all
+      const selectAllCheckbox = document.getElementById('export-select-all-checkbox');
+      if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (e) => {
+          const checkboxes = modal.querySelectorAll('.export-profile-item input[type="checkbox"]');
+          checkboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+      }
+      
+      // Wire up buttons
+      const cancelBtn = document.getElementById('export-cancel');
+      const executeBtn = document.getElementById('export-execute');
+      
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+          modal.remove();
+        });
+      }
+      
+      if (executeBtn) {
+        executeBtn.addEventListener('click', () => {
+          const selectedIds = Array.from(modal.querySelectorAll('.export-profile-item input[type="checkbox"]:checked'))
+            .map(cb => cb.value);
+          
+          if (selectedIds.length === 0) {
+            const statusEl = document.createElement('p');
+            statusEl.className = 'muted modal-text-muted-small';
+            statusEl.textContent = 'Please select at least one profile to export';
+            statusEl.style.color = '#f44336';
+            statusEl.style.marginTop = '12px';
+            const actionsDiv = modal.querySelector('.actions');
+            if (actionsDiv) {
+              actionsDiv.parentNode.insertBefore(statusEl, actionsDiv);
+            }
+            return;
+          }
+          
+          const selectedProfiles = profiles.list.filter(p => selectedIds.includes(p.id));
+          const envelope = createExportEnvelope(selectedProfiles);
+          const json = JSON.stringify(envelope, null, 2);
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `promptiply-profiles-${new Date().toISOString().split('T')[0]}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          
+          modal.remove();
+          showToast(`Exported ${selectedProfiles.length} profile(s)`);
+          console.log('[promptiply] Exported', selectedProfiles.length, 'profiles');
+        });
+      }
     });
   }
 
@@ -1045,25 +1145,25 @@
           <img src="../icons/icon-48.png" alt="promptiply" class="icon-48" />
           <div id="import-modal-title">Import Profiles</div>
         </div>
-        <div class="onboarding-section">
+        <div class="onboarding-section import-modal-grid">
           <div class="field">
             <label for="import-url">From URL</label>
             <input id="import-url" type="url" placeholder="https://example.com/profiles.json" aria-describedby="import-url-hint" />
-            <div id="import-url-hint" class="muted" style="font-size: 12px; margin-top: 4px;">Load profiles from a URL</div>
+            <div id="import-url-hint" class="muted modal-hint-text">Load profiles from a URL</div>
           </div>
-          <div style="text-align: center; margin: 12px 0;">— or —</div>
+          <div class="modal-text-center">— or —</div>
           <div class="field">
             <label for="import-file">From File</label>
             <input id="import-file" type="file" accept=".json" aria-describedby="import-file-hint" />
-            <div id="import-file-hint" class="muted" style="font-size: 12px; margin-top: 4px;">Upload a JSON file</div>
+            <div id="import-file-hint" class="muted modal-hint-text">Upload a JSON file</div>
           </div>
-          <div style="text-align: center; margin: 12px 0;">— or —</div>
+          <div class="modal-text-center">— or —</div>
           <div class="field">
             <label for="import-json">Paste JSON</label>
-            <textarea id="import-json" placeholder='{"schemaVersion":1,"profiles":[...]}' style="font-family: monospace; min-height: 100px;" aria-describedby="import-json-hint"></textarea>
-            <div id="import-json-hint" class="muted" style="font-size: 12px; margin-top: 4px;">Paste JSON data directly</div>
+            <textarea id="import-json" class="modal-textarea-mono" placeholder='{"schemaVersion":1,"profiles":[...]}' aria-describedby="import-json-hint"></textarea>
+            <div id="import-json-hint" class="muted modal-hint-text">Paste JSON data directly</div>
           </div>
-          <div id="import-status" role="status" aria-live="polite" style="margin-top: 12px; min-height: 20px;"></div>
+          <div id="import-status" role="status" aria-live="polite" class="modal-status-box"></div>
         </div>
         <div class="actions actions-space-between actions-top-margin">
           <button id="import-cancel">Cancel</button>
@@ -1078,37 +1178,59 @@
     setTimeout(() => document.getElementById('import-url')?.focus(), 100);
     
     // Wire up buttons
-    document.getElementById('import-cancel').addEventListener('click', () => {
-      modal.remove();
-    });
+    const cancelBtn = document.getElementById('import-cancel');
+    const executeBtn = document.getElementById('import-execute');
     
-    document.getElementById('import-execute').addEventListener('click', () => {
-      executeImport(modal);
-    });
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        modal.remove();
+      });
+    }
+    
+    if (executeBtn) {
+      executeBtn.addEventListener('click', () => {
+        executeImport(modal);
+      });
+    }
     
     // URL input handler
-    document.getElementById('import-url').addEventListener('input', (e) => {
-      if (e.target.value.trim()) {
-        document.getElementById('import-file').value = '';
-        document.getElementById('import-json').value = '';
-      }
-    });
+    const urlInput = document.getElementById('import-url');
+    if (urlInput) {
+      urlInput.addEventListener('input', (e) => {
+        if (e.target.value.trim()) {
+          const fileInput = document.getElementById('import-file');
+          const jsonInput = document.getElementById('import-json');
+          if (fileInput) fileInput.value = '';
+          if (jsonInput) jsonInput.value = '';
+        }
+      });
+    }
     
     // File input handler
-    document.getElementById('import-file').addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
-        document.getElementById('import-url').value = '';
-        document.getElementById('import-json').value = '';
-      }
-    });
+    const fileInput = document.getElementById('import-file');
+    if (fileInput) {
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          const urlInput = document.getElementById('import-url');
+          const jsonInput = document.getElementById('import-json');
+          if (urlInput) urlInput.value = '';
+          if (jsonInput) jsonInput.value = '';
+        }
+      });
+    }
     
     // JSON textarea handler
-    document.getElementById('import-json').addEventListener('input', (e) => {
-      if (e.target.value.trim()) {
-        document.getElementById('import-url').value = '';
-        document.getElementById('import-file').value = '';
-      }
-    });
+    const jsonInput = document.getElementById('import-json');
+    if (jsonInput) {
+      jsonInput.addEventListener('input', (e) => {
+        if (e.target.value.trim()) {
+          const urlInput = document.getElementById('import-url');
+          const fileInput = document.getElementById('import-file');
+          if (urlInput) urlInput.value = '';
+          if (fileInput) fileInput.value = '';
+        }
+      });
+    }
   }
 
   function executeImport(modal) {
@@ -1483,13 +1605,6 @@
         onboardingFinish.dataset.prAttached = "1";
       }
 
-      // Import all predefined profiles button
-      const importAllBtn = document.getElementById("import-all-predefined");
-      if (importAllBtn && !importAllBtn.dataset.prAttached) {
-        importAllBtn.addEventListener("click", importAllPredefined);
-        importAllBtn.dataset.prAttached = "1";
-      }
-
       // Restore Defaults button
       const restoreBtn = document.getElementById("restore-defaults");
       if (restoreBtn && !restoreBtn.dataset.prAttached) {
@@ -1672,6 +1787,9 @@
       if (!data[STORAGE_ONBOARDING]) setTimeout(() => openOnboardingWizard(), 500);
     });
   } catch (_) {}
+
+  // Auto-import predefined profiles on first load
+  autoImportPredefinedProfiles();
 
   console.log("[promptiply] Options script loaded");
   window.__PR_OPTIONS_LOADED = true;
