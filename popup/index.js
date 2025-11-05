@@ -75,13 +75,8 @@
   async function openOptionsForOnboarding() {
     const url = chrome.runtime.getURL('options/index.html?onboard=1');
     try {
-      if (chrome.runtime.openOptionsPage) {
-        chrome.runtime.openOptionsPage();
-        // also create a tab pointing to the onboarding URL to be safe
-        chrome.tabs.create({ url, active: true });
-      } else {
-        window.open(url);
-      }
+      // Only create one tab
+      chrome.tabs.create({ url, active: true });
     } catch (e) {
       try { window.open(url); } catch (_) {}
     }

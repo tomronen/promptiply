@@ -195,6 +195,21 @@ button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35)
   gap: 16px;
 }
 
+.file-input-wrapper {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.file-input-wrapper input[type="file"] {
+  cursor: pointer;
+}
+
+#import-file-name {
+  display: block;
+  margin-top: 8px;
+  font-style: italic;
+}
+
 .undo-toast-button {
   margin-left: 12px;
   padding: 4px 8px;

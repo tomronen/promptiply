@@ -533,45 +533,43 @@
             <option value="anthropic" ${onboardingState.selectedProvider === "anthropic" ? "selected" : ""}>Anthropic (Claude)</option>
           </select>
         </div>
-        <div id="ob-openai-fields" class="${onboardingState.selectedProvider === "openai" ? "" : "hidden"}">
-          <div class="field">
-            <label>OpenAI API Key</label>
-            <input id="ob-openai-key" type="password" placeholder="sk-..." value="${escapeHtml(onboardingState.apiKey)}" />
-          </div>
-          <div class="field">
-            <label>Model</label>
-            <select id="ob-openai-model">
-              <option value="gpt-5-nano">gpt-5-nano</option>
-              <option value="gpt-5-mini">gpt-5-mini</option>
-              <option value="gpt-5">gpt-5</option>
-            </select>
-          </div>
-        </div>
-        <div id="ob-anthropic-fields" class="${onboardingState.selectedProvider === "anthropic" ? "" : "hidden"}">
-          <div class="field">
-            <label>Anthropic API Key</label>
-            <input id="ob-anthropic-key" type="password" placeholder="sk-ant-..." value="${escapeHtml(onboardingState.apiKey)}" />
-          </div>
-          <div class="field">
-            <label>Model</label>
-            <select id="ob-anthropic-model">
-              <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
-              <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
-            </select>
-          </div>
+        <div id="ob-provider-fields">
+          ${onboardingState.selectedProvider === "openai" ? `
+            <div class="field">
+              <label>OpenAI API Key</label>
+              <input id="ob-api-key" type="password" placeholder="sk-..." value="${escapeHtml(onboardingState.apiKey)}" />
+            </div>
+            <div class="field">
+              <label>Model</label>
+              <select id="ob-model">
+                <option value="gpt-5-nano">gpt-5-nano</option>
+                <option value="gpt-5-mini">gpt-5-mini</option>
+                <option value="gpt-5">gpt-5</option>
+              </select>
+            </div>
+          ` : `
+            <div class="field">
+              <label>Anthropic API Key</label>
+              <input id="ob-api-key" type="password" placeholder="sk-ant-..." value="${escapeHtml(onboardingState.apiKey)}" />
+            </div>
+            <div class="field">
+              <label>Model</label>
+              <select id="ob-model">
+                <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
+                <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
+              </select>
+            </div>
+          `}
         </div>
         <p class="muted muted-top-margin muted-small">You can skip this step and set up your API key later in Settings.</p>
       `;
 
       const obProvider = document.getElementById("ob-provider");
-      const obOpenaiFields = document.getElementById("ob-openai-fields");
-      const obAnthropicFields = document.getElementById("ob-anthropic-fields");
-
       if (obProvider) {
         obProvider.addEventListener("change", () => {
           onboardingState.selectedProvider = obProvider.value;
-          obOpenaiFields?.classList.toggle("hidden", obProvider.value !== "openai");
-          obAnthropicFields?.classList.toggle("hidden", obProvider.value !== "anthropic");
+          // Re-render to show only the selected provider's fields
+          renderSetupStep();
         });
       }
     } else if (onboardingState.selectedMode === "webui") {
@@ -661,17 +659,11 @@
       const obProvider = document.getElementById("ob-provider");
       if (obProvider) onboardingState.selectedProvider = obProvider.value;
 
-      if (onboardingState.selectedProvider === "openai") {
-        const obOpenaiKey = document.getElementById("ob-openai-key");
-        const obOpenaiModel = document.getElementById("ob-openai-model");
-        if (obOpenaiKey) onboardingState.apiKey = obOpenaiKey.value.trim();
-        if (obOpenaiModel) onboardingState.model = obOpenaiModel.value;
-      } else {
-        const obAnthropicKey = document.getElementById("ob-anthropic-key");
-        const obAnthropicModel = document.getElementById("ob-anthropic-model");
-        if (obAnthropicKey) onboardingState.apiKey = obAnthropicKey.value.trim();
-        if (obAnthropicModel) onboardingState.model = obAnthropicModel.value;
-      }
+      // Use unified field IDs
+      const obApiKey = document.getElementById("ob-api-key");
+      const obModel = document.getElementById("ob-model");
+      if (obApiKey) onboardingState.apiKey = obApiKey.value.trim();
+      if (obModel) onboardingState.model = obModel.value;
     } else if (onboardingState.step === 3) {
       const obProfileName = document.getElementById("ob-profile-name");
       const obProfilePersona = document.getElementById("ob-profile-persona");
@@ -878,14 +870,15 @@
     });
   }
 
-  // Restore Defaults with confirmation and undo
+  // Restore Defaults - resets to only predefined profiles
   function showRestoreConfirmation() {
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
       const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
-      const toDelete = cur.list.filter(p => p.importedFromPredefined === true);
+      const predefinedProfiles = cur.list.filter(p => p.importedFromPredefined === true);
+      const customProfiles = cur.list.filter(p => !p.importedFromPredefined);
       
-      if (toDelete.length === 0) {
-        showToast('No imported predefined profiles to restore');
+      if (customProfiles.length === 0) {
+        showToast('Already at defaults (only predefined profiles exist)');
         return;
       }
 
@@ -900,16 +893,16 @@
             <div>Restore Defaults</div>
           </div>
           <div class="onboarding-section">
-            <p>This will remove <strong>${toDelete.length}</strong> imported predefined profile(s):</p>
+            <p>This will remove <strong>${customProfiles.length}</strong> custom profile(s) and keep only the predefined profiles:</p>
             <div class="list modal-list-container">
-              ${toDelete.map(p => `
+              ${customProfiles.map(p => `
                 <div class="card modal-card-compact">
                   <div><strong>${escapeHtml(p.name)}</strong></div>
                   <div class="muted modal-text-muted-small">${escapeHtml(p.persona || '')}</div>
                 </div>
               `).join('')}
             </div>
-            <p class="muted">You'll be able to undo this action for 10 seconds.</p>
+            <p class="muted">Predefined profiles (${predefinedProfiles.length}) will be kept. You'll be able to undo this for 10 seconds.</p>
           </div>
           <div class="actions actions-space-between actions-top-margin">
             <button id="restore-cancel">Cancel</button>
@@ -933,7 +926,7 @@
       if (confirmBtn) {
         confirmBtn.addEventListener('click', () => {
           modal.remove();
-          restoreDefaults(toDelete);
+          restoreDefaults(customProfiles);
         });
       }
     });
@@ -946,8 +939,8 @@
       // Store for undo
       deletedProfilesUndo = [...toDelete];
       
-      // Remove imported profiles
-      const remaining = cur.list.filter(p => !p.importedFromPredefined);
+      // Keep only predefined profiles
+      const remaining = cur.list.filter(p => p.importedFromPredefined);
       const updated = {
         list: remaining,
         activeProfileId: remaining.some(p => p.id === cur.activeProfileId) ? cur.activeProfileId : (remaining[0]?.id || null)
@@ -956,7 +949,7 @@
       chrome.storage.sync.set({ [STORAGE_PROFILES]: updated }, () => {
         renderProfiles(updated);
         showUndoToast(toDelete.length);
-        console.log('[promptiply] Restored defaults, removed', toDelete.length, 'profiles');
+        console.log('[promptiply] Restored defaults, removed', toDelete.length, 'custom profiles');
       });
     });
   }
@@ -1076,14 +1069,28 @@
       
       document.body.appendChild(modal);
       
-      // Handle select all
+      // Get references
       const selectAllCheckbox = document.getElementById('export-select-all-checkbox');
+      const profileCheckboxes = Array.from(modal.querySelectorAll('.export-profile-item input[type="checkbox"]'));
+      
+      // Handle select all
       if (selectAllCheckbox) {
         selectAllCheckbox.addEventListener('change', (e) => {
-          const checkboxes = modal.querySelectorAll('.export-profile-item input[type="checkbox"]');
-          checkboxes.forEach(cb => cb.checked = e.target.checked);
+          profileCheckboxes.forEach(cb => cb.checked = e.target.checked);
         });
       }
+      
+      // Update select all when individual checkboxes change
+      profileCheckboxes.forEach(cb => {
+        cb.addEventListener('change', () => {
+          const allChecked = profileCheckboxes.every(c => c.checked);
+          const noneChecked = profileCheckboxes.every(c => !c.checked);
+          if (selectAllCheckbox) {
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = !allChecked && !noneChecked;
+          }
+        });
+      });
       
       // Wire up buttons
       const cancelBtn = document.getElementById('export-cancel');
@@ -1145,24 +1152,34 @@
           <img src="../icons/icon-48.png" alt="promptiply" class="icon-48" />
           <div id="import-modal-title">Import Profiles</div>
         </div>
-        <div class="onboarding-section import-modal-grid">
+        <div class="onboarding-section">
+          <p>Choose how you want to import profiles:</p>
+          
           <div class="field">
-            <label for="import-url">From URL</label>
+            <label for="import-file">Select File</label>
+            <div class="file-input-wrapper">
+              <input id="import-file" type="file" accept=".json" aria-describedby="import-file-hint" />
+              <span id="import-file-name" class="muted modal-hint-text">No file selected</span>
+            </div>
+            <div id="import-file-hint" class="muted modal-hint-text">Choose a JSON file from your computer</div>
+          </div>
+          
+          <div class="modal-text-center">— or —</div>
+          
+          <div class="field">
+            <label for="import-url">Load from URL</label>
             <input id="import-url" type="url" placeholder="https://example.com/profiles.json" aria-describedby="import-url-hint" />
-            <div id="import-url-hint" class="muted modal-hint-text">Load profiles from a URL</div>
+            <div id="import-url-hint" class="muted modal-hint-text">Enter a URL to a JSON file (must support CORS)</div>
           </div>
+          
           <div class="modal-text-center">— or —</div>
-          <div class="field">
-            <label for="import-file">From File</label>
-            <input id="import-file" type="file" accept=".json" aria-describedby="import-file-hint" />
-            <div id="import-file-hint" class="muted modal-hint-text">Upload a JSON file</div>
-          </div>
-          <div class="modal-text-center">— or —</div>
+          
           <div class="field">
             <label for="import-json">Paste JSON</label>
             <textarea id="import-json" class="modal-textarea-mono" placeholder='{"schemaVersion":1,"profiles":[...]}' aria-describedby="import-json-hint"></textarea>
-            <div id="import-json-hint" class="muted modal-hint-text">Paste JSON data directly</div>
+            <div id="import-json-hint" class="muted modal-hint-text">Paste your profile data in JSON format</div>
           </div>
+          
           <div id="import-status" role="status" aria-live="polite" class="modal-status-box"></div>
         </div>
         <div class="actions actions-space-between actions-top-margin">
@@ -1208,6 +1225,7 @@
     
     // File input handler
     const fileInput = document.getElementById('import-file');
+    const fileNameDisplay = document.getElementById('import-file-name');
     if (fileInput) {
       fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
@@ -1215,6 +1233,15 @@
           const jsonInput = document.getElementById('import-json');
           if (urlInput) urlInput.value = '';
           if (jsonInput) jsonInput.value = '';
+          if (fileNameDisplay) {
+            fileNameDisplay.textContent = e.target.files[0].name;
+            fileNameDisplay.style.color = 'var(--text)';
+          }
+        } else {
+          if (fileNameDisplay) {
+            fileNameDisplay.textContent = 'No file selected';
+            fileNameDisplay.style.color = '';
+          }
         }
       });
     }
