@@ -27,9 +27,10 @@ const ChatGPTAdapter = {
   insertButton(btn) {
     const input = this.findInput();
     if (!input || (input.closest && input.closest('.pr-btn-mounted'))) return;
-  const wrapper = document.createElement('div');
-  wrapper.className = 'pr-btn-mounted js-btn-mounted';
-  // layout controlled via CSS class (no inline style)
+    const wrapper = document.createElement('div');
+    wrapper.className = 'pr-btn-mounted';
+    wrapper.style.display = 'flex';
+    wrapper.style.justifyContent = 'flex-end';
     wrapper.appendChild(btn);
     if (input.parentElement) input.parentElement.appendChild(wrapper);
   },
@@ -75,9 +76,10 @@ const ClaudeAdapter = {
   insertButton(btn) {
     const input = this.findInput();
     if (!input || (input.closest && input.closest('.pr-btn-mounted'))) return;
-  const wrapper = document.createElement('div');
-  wrapper.className = 'pr-btn-mounted js-btn-mounted';
-  // layout controlled via CSS class
+    const wrapper = document.createElement('div');
+    wrapper.className = 'pr-btn-mounted';
+    wrapper.style.display = 'flex';
+    wrapper.style.justifyContent = 'flex-end';
     wrapper.appendChild(btn);
     if (input.parentElement) input.parentElement.appendChild(wrapper);
   },
@@ -126,28 +128,8 @@ function matchesHotkey(e, combo) {
     return;
   }
 
-  // Wait for critical page resources to load before initializing
-  // This prevents interference with ChatGPT's initialization sequence
-  function waitForPageReady() {
-    return new Promise((resolve) => {
-      // If document is already complete, wait a bit more
-      if (document.readyState === 'complete') {
-        setTimeout(resolve, 300); // Reduced from 500ms to 300ms
-        return;
-      }
-      
-      // Otherwise wait for load event
-      window.addEventListener('load', () => {
-        setTimeout(resolve, 300); // Reduced from 500ms to 300ms
-      }, { once: true });
-    });
-  }
-
-  // Initialize after page is ready
-  waitForPageReady().then(() => {
-    // Observe input area and inject button
-    initInjection(adapter);
-  });
+  // Observe input area and inject button
+  initInjection(adapter);
 
   // Register hotkey from settings (platform-aware default)
   function getDefaultHotkey() {
@@ -191,9 +173,9 @@ function matchesHotkey(e, combo) {
   function updateProgress(progress) {
     currentProgress = progress;
     const el = document.querySelector('.pr-overlay');
-    if (el && !el.classList.contains('pr-hidden')) {
+    if (el && el.style.display !== 'none') {
       // Update the overlay with progress
-      const body = (el.shadowRoot || el).querySelector('.pr-body');
+      const body = el.querySelector('.pr-body');
       if (body && progress) {
         renderProgress(body, progress);
       }
@@ -201,41 +183,55 @@ function matchesHotkey(e, combo) {
   }
   
   function renderProgress(container, progress) {
-  container.innerHTML = '';
-
-  const statusText = document.createElement('div');
-  statusText.className = 'pr-status-text';
-  statusText.textContent = progress.message || 'Loading...';
-  container.appendChild(statusText);
+    container.innerHTML = '';
     
-    // Progress bar container (SVG-based to avoid inline style updates)
-  const progressContainer = document.createElement('div');
-  progressContainer.className = 'pr-progress-container';
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('viewBox', '0 0 100 8');
-  svg.setAttribute('class', 'pr-progress-svg');
-  const bg = document.createElementNS(svgNS, 'rect');
-  bg.setAttribute('x', '0'); bg.setAttribute('y', '0'); bg.setAttribute('width', '100'); bg.setAttribute('height', '8'); bg.setAttribute('fill', 'rgba(255,255,255,0.03)');
-  const fg = document.createElementNS(svgNS, 'rect');
-  fg.setAttribute('x', '0'); fg.setAttribute('y', '0'); fg.setAttribute('width', String(Math.min(100, Math.max(0, progress.progress || 0)))); fg.setAttribute('height', '8'); fg.setAttribute('class', 'pr-progress-fill'); fg.setAttribute('fill', '#7c3aed');
-  svg.appendChild(bg);
-  svg.appendChild(fg);
-  progressContainer.appendChild(svg);
-  container.appendChild(progressContainer);
+    const statusText = document.createElement('div');
+    statusText.style.marginBottom = '12px';
+    statusText.style.fontSize = '14px';
+    statusText.style.color = 'var(--pr-text)';
+    statusText.textContent = progress.message || 'Loading...';
+    container.appendChild(statusText);
+    
+    // Progress bar container
+    const progressContainer = document.createElement('div');
+    progressContainer.style.width = '100%';
+    progressContainer.style.height = '8px';
+    progressContainer.style.backgroundColor = 'var(--pr-bg)';
+    progressContainer.style.borderRadius = '4px';
+    progressContainer.style.overflow = 'hidden';
+    progressContainer.style.border = '1px solid var(--pr-border)';
+    
+    // Progress bar fill
+    const progressBar = document.createElement('div');
+    progressBar.style.height = '100%';
+    progressBar.style.backgroundColor = 'linear-gradient(90deg, var(--pr-accent), var(--pr-accent2))';
+    progressBar.style.background = 'linear-gradient(90deg, #7c3aed, #06b6d4)';
+    progressBar.style.transition = 'width 0.3s ease';
+    progressBar.style.width = `${Math.min(100, Math.max(0, progress.progress || 0))}%`;
+    progressBar.style.borderRadius = '4px';
+    
+    progressContainer.appendChild(progressBar);
+    container.appendChild(progressContainer);
     
     // Progress percentage text
     if (progress.progress !== undefined && progress.progress > 0) {
-  const percentText = document.createElement('div');
-  percentText.className = 'pr-percent-text';
-  percentText.textContent = `${Math.round(progress.progress)}%`;
-  container.appendChild(percentText);
+      const percentText = document.createElement('div');
+      percentText.style.marginTop = '8px';
+      percentText.style.fontSize = '12px';
+      percentText.style.color = 'var(--pr-muted)';
+      percentText.style.textAlign = 'center';
+      percentText.textContent = `${Math.round(progress.progress)}%`;
+      container.appendChild(percentText);
     }
     
-  // Stage indicator
+    // Stage indicator
     if (progress.stage) {
       const stageText = document.createElement('div');
-      stageText.className = 'pr-stage-text';
+      stageText.style.marginTop = '4px';
+      stageText.style.fontSize = '11px';
+      stageText.style.color = 'var(--pr-muted)';
+      stageText.style.textAlign = 'center';
+      stageText.style.textTransform = 'capitalize';
       stageText.textContent = progress.stage === 'downloading' ? 'Downloading model files...' :
                              progress.stage === 'initializing' ? 'Initializing model...' :
                              progress.stage === 'compiling' ? 'Compiling model...' :
@@ -262,36 +258,16 @@ function matchesHotkey(e, combo) {
     let floatUi = null;
     let observedInput = null;
     let ro = null;
-    let updateTimeout = null;
-    let lastUpdateTime = 0;
-    const MIN_UPDATE_INTERVAL = 200; // Minimum 200ms between updates
-    
     const update = () => {
-      // Clear any pending timeout
-      if (updateTimeout) {
-        clearTimeout(updateTimeout);
-        updateTimeout = null;
-      }
-      
-      // Debounce: check if we need to delay
-      const now = Date.now();
-      const timeSinceLastUpdate = now - lastUpdateTime;
-      if (timeSinceLastUpdate < MIN_UPDATE_INTERVAL) {
-        // Schedule update for later, ensuring we wait the full interval
-        updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL - timeSinceLastUpdate);
-        return;
-      }
-      lastUpdateTime = now;
-      
       const inputEl = adapter.findInput();
       if (!inputEl) {
-        if (floatUi) floatUi.classList.add('pr-pos-hidden');
+        if (floatUi) floatUi.style.display = 'none';
         try { console.debug('[promptiply] Chat input not found yet; will retry'); } catch(_) {}
         return;
       }
       if (!floatUi) floatUi = createFloatingRefineUI(() => tryRefine(adapter));
-  positionFloatingUI(floatUi, inputEl);
-  floatUi.classList.remove('pr-pos-hidden');
+      positionFloatingUI(floatUi, inputEl);
+      floatUi.style.display = 'block';
       if (observedInput !== inputEl) {
         observedInput = inputEl;
         if (ro) try { ro.disconnect(); } catch(_) {}
@@ -301,47 +277,22 @@ function matchesHotkey(e, combo) {
         } catch(_) {}
       }
     };
-    
-    // Position update for scroll/resize (bypasses debouncing for better responsiveness)
-    const updatePosition = () => {
-      if (floatUi && observedInput) {
-        positionFloatingUI(floatUi, observedInput);
-      }
-    };
 
     // Initial attempt + observe
     update();
-    // Use throttled MutationObserver: observe only childList, not all attributes
-    const mo = new MutationObserver(() => {
-      // Throttle MutationObserver callbacks to reduce overhead
-      if (!updateTimeout) {
-        updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL);
-      }
-    });
-    // Observe only childList changes, not attributes (less aggressive)
-    mo.observe(document.documentElement, { subtree: true, childList: true });
-    // Use direct position update for scroll/resize to ensure button stays correctly positioned
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-    // Also poll more aggressively during first seconds to catch late mounts
+    const mo = new MutationObserver(() => update());
+    mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    // Also poll briefly during first seconds to catch late mounts
     let tries = 0;
-    const iv = setInterval(() => { 
-      tries++; 
-      update(); 
-      if (tries > 80) clearInterval(iv);
-    }, 150); // More frequent polling: every 150ms for up to 12 seconds
+    const iv = setInterval(() => { tries++; update(); if (tries > 60) clearInterval(iv); }, 250);
   }
 
   async function tryRefine(adapter) {
     const raw = adapter.readInput();
     if (!raw || !raw.trim()) {
-      try { 
-        console.warn('[promptiply] Refine triggered but no prompt text found.');
-        console.debug('[promptiply] Input element search:', {
-          found: !!adapter.findInput(),
-          inputElement: adapter.findInput()
-        });
-      } catch(_) {}
+      try { console.warn('[promptiply] Refine hotkey used but no prompt detected (empty input).'); } catch(_) {}
       return;
     }
     try { console.log('[promptiply] Sending refinement request', { len: raw.length, preview: raw.slice(0,100) }); } catch(_) {}
@@ -430,24 +381,7 @@ function matchesHotkey(e, combo) {
     if (!el) {
       el = document.createElement('div');
       el.className = 'pr-overlay';
-      const shadow = el.attachShadow({ mode: 'open' });
-      shadow.innerHTML = `
-        <style>
-          :host { all: initial; position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2147483647; }
-          .pr-card { background: rgba(11,18,32,0.95); color: #e5e7eb; border-radius: 12px; padding: 18px; min-width: 320px; max-width: 640px; box-shadow: 0 12px 36px rgba(0,0,0,0.6); }
-          .pr-header { font-weight:700; margin-bottom:8px; }
-          .pr-body { margin-bottom:12px; }
-          .pr-actions { display:flex; gap:8px; justify-content:flex-end; }
-          .pr-hidden { display:none !important; }
-          .pr-status-text { margin-bottom:12px; font-size:14px; color:var(--pr-text, #e5e7eb); }
-          .pr-progress-container { width:100%; height:8px; background: rgba(255,255,255,0.03); border-radius:4px; overflow:hidden; border:1px solid rgba(255,255,255,0.03); }
-          .pr-progress-bar { height:100%; border-radius:4px; background: linear-gradient(90deg, #7c3aed, #06b6d4); transition: width 0.3s ease; }
-          .pr-percent-text { margin-top:8px; font-size:12px; color:rgba(255,255,255,0.7); text-align:center; }
-          .pr-stage-text { margin-top:4px; font-size:11px; color:rgba(255,255,255,0.6); text-align:center; text-transform:capitalize; }
-          .pr-error-msg { color:#ef4444; margin-bottom:8px; font-size:13px; }
-          .pr-draft { width:100%; min-height:120px; font-family: monospace; }
-          .pr-spinner { width:24px; height:24px; display:inline-block; }
-        </style>
+      el.innerHTML = `
         <div class="pr-card">
           <div class="pr-header">promptiply</div>
           <div class="pr-body"></div>
@@ -456,43 +390,25 @@ function matchesHotkey(e, combo) {
       `;
       document.body.appendChild(el);
     }
-    const shadow = el.shadowRoot || el;
-      // Prefer elements inside the overlay's shadow root when present
-      const sr = el.shadowRoot || null;
-      const body = sr ? sr.querySelector('.pr-body') : el.querySelector('.pr-body');
-      const actions = sr ? sr.querySelector('.pr-actions') : el.querySelector('.pr-actions');
-  if (actions) actions.innerHTML = '';
+    const body = el.querySelector('.pr-body');
+    const actions = el.querySelector('.pr-actions');
+    actions.innerHTML = '';
 
     if (opts.status === 'working') {
       // Check if we have progress info (for local mode)
       if (currentProgress) {
         renderProgress(body, currentProgress);
       } else {
-  body.textContent = 'Refining draft...';
-  // SVG spinner using SMIL animation to avoid CSS keyframes
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('class', 'pr-spinner');
-  svg.setAttribute('viewBox', '0 0 50 50');
-  const circle = document.createElementNS(svgNS, 'circle');
-  circle.setAttribute('cx', '25');
-  circle.setAttribute('cy', '25');
-  circle.setAttribute('r', '20');
-  circle.setAttribute('fill', 'none');
-  circle.setAttribute('stroke', '#7c3aed');
-  circle.setAttribute('stroke-width', '4');
-  circle.setAttribute('stroke-linecap', 'round');
-  const anim = document.createElementNS(svgNS, 'animateTransform');
-  anim.setAttribute('attributeType', 'xml');
-  anim.setAttribute('attributeName', 'transform');
-  anim.setAttribute('type', 'rotate');
-  anim.setAttribute('from', '0 25 25');
-  anim.setAttribute('to', '360 25 25');
-  anim.setAttribute('dur', '1s');
-  anim.setAttribute('repeatCount', 'indefinite');
-  circle.appendChild(anim);
-  svg.appendChild(circle);
-  if (body) body.appendChild(svg);
+        body.textContent = 'Refining draft...';
+        const spinner = document.createElement('div');
+        spinner.style.width = '24px';
+        spinner.style.height = '24px';
+        spinner.style.border = '3px solid rgba(255,255,255,0.15)';
+        spinner.style.borderTopColor = '#7c3aed';
+        spinner.style.borderRadius = '999px';
+        spinner.style.marginTop = '8px';
+        spinner.style.animation = 'pr-spin 1s linear infinite';
+        body.appendChild(spinner);
       }
       const cancel = document.createElement('button');
       cancel.textContent = 'Close';
@@ -502,17 +418,19 @@ function matchesHotkey(e, combo) {
       body.innerHTML = '';
       if (opts.error) {
         const errMsg = document.createElement('div');
-          errMsg.className = 'pr-error-msg';
-          errMsg.textContent = opts.error;
-          if (body) body.appendChild(errMsg);
+        errMsg.style.color = '#ef4444';
+        errMsg.style.marginBottom = '8px';
+        errMsg.style.fontSize = '13px';
+        errMsg.textContent = opts.error;
+        body.appendChild(errMsg);
       }
-  const ta = document.createElement('textarea');
-  ta.className = 'pr-draft';
-  ta.value = opts.refined || '';
-  if (body) body.appendChild(ta);
-      const applyBtn = document.createElement('button');
-      applyBtn.textContent = 'Apply';
-      applyBtn.addEventListener('click', () => {
+      const ta = document.createElement('textarea');
+      ta.className = 'pr-draft';
+      ta.value = opts.refined || '';
+      body.appendChild(ta);
+      const apply = document.createElement('button');
+      apply.textContent = 'Apply';
+      apply.addEventListener('click', () => {
         const v = ta.value;
         opts.onApply && opts.onApply(v);
         hideOverlay();
@@ -520,41 +438,37 @@ function matchesHotkey(e, combo) {
       const cancel = document.createElement('button');
       cancel.textContent = 'Cancel';
       cancel.addEventListener('click', hideOverlay);
-      if (actions) {
-        actions.appendChild(applyBtn);
-        actions.appendChild(cancel);
-      }
-  }
-    // show overlay (host element is an element with shadow styles)
-    el.classList.remove('pr-hidden');
-  }
-
-    // Hide overlay helper
-    function hideOverlay() {
-      try {
-        const el = document.querySelector('.pr-overlay');
-        if (!el) return;
-        // hide and clear progress
-        el.classList.add('pr-hidden');
-        currentProgress = null;
-        // remove element after a short delay to avoid interrupting events
-        setTimeout(() => { try { el.remove(); } catch(_) {} }, 120);
-      } catch (e) { try { console.warn('[promptiply] hideOverlay failed', e); } catch(_) {} }
+      actions.appendChild(apply);
+      actions.appendChild(cancel);
     }
+    el.style.display = 'block';
+  }
 
+  function hideOverlay() {
+    const el = document.querySelector('.pr-overlay');
+    if (el) el.style.display = 'none';
+  }
 })();
+// Animations
+const prStyle = document.createElement('style');
+prStyle.textContent = `@keyframes pr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+document.documentElement.appendChild(prStyle);
+
 
 // Floating UI (Shadow DOM) to avoid interfering with site React trees
 function createFloatingRefineUI(onClick) {
   const host = document.createElement('div');
-  host.className = 'pr-float-host pr-pos-hidden';
-  // no inline styles on host; positioning handled via shadow styles based on host class
+  host.className = 'pr-float-host';
+  host.style.position = 'fixed';
+  host.style.zIndex = '2147483646';
+  host.style.top = '0px';
+  host.style.left = '0px';
+  host.style.pointerEvents = 'none';
+  host.style.display = 'none';
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = `
-    :host { all: initial; display: none; pointer-events: none; }
-    :host(.pr-pos-hidden) { display: none !important; }
-    :host(.pr-pos-positioned) { position: fixed; display: block; z-index: 1000; }
+    :host { all: initial; }
     .wrap { pointer-events: auto; }
     .btn { background: linear-gradient(135deg, #7c3aed, #06b6d4); color:#fff; border:none; border-radius: 10px; padding:6px 10px; font-size:12px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.3); transition:transform .15s ease, filter .15s ease; }
     .btn:hover { filter: brightness(1.06); }
@@ -578,52 +492,32 @@ function positionFloatingUI(host, inputEl) {
   try {
     const target = document.activeElement && document.activeElement.isSameNode(inputEl) ? document.activeElement : inputEl;
     const rect = target.getBoundingClientRect();
-    
-    // Position button inside the input area, at the bottom-right corner
-    // Add some padding from the edges
-    const rightPos = window.innerWidth - rect.right + 8;
-    const bottomPos = window.innerHeight - rect.bottom + 8;
-    
-    host.style.right = `${rightPos}px`;
-    host.style.bottom = `${bottomPos}px`;
-    
-    host.classList.remove('pr-pos-hidden');
-    host.classList.add('pr-pos-positioned');
-    
-    try { 
-      console.debug('[promptiply] Positioned button:', {
-        position: 'inside input field (bottom-right)',
-        inputRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-        buttonPos: { right: rightPos, bottom: bottomPos }
-      });
-    } catch(_) {}
+    const x = Math.min(window.innerWidth - 64, Math.max(0, rect.right - 64));
+    const y = Math.min(window.innerHeight - 36, Math.max(0, rect.bottom - 36));
+    host.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+    try { console.debug('[promptiply] Positioning refine button at', { x, y, rect }); } catch(_) {}
   } catch (_) {}
 }
 
-// Deep query that traverses open shadow roots (with depth limit to prevent excessive recursion)
+// Deep query that traverses open shadow roots
 function deepQuerySelector(selector, root = document) {
   const seen = new Set();
-  const MAX_DEPTH = 15; // Limit recursion depth to prevent performance issues
-  const MAX_CHILDREN_PER_NODE = 50; // Limit children processed per node for performance
-  
-  function walk(node, depth = 0) {
-    if (!node || seen.has(node) || depth > MAX_DEPTH) return null;
+  function walk(node) {
+    if (!node || seen.has(node)) return null;
     seen.add(node);
     try {
       const found = node.querySelector?.(selector);
       if (found) return found;
     } catch (_) {}
     const children = node.children || [];
-    // Early exit if too many children (performance optimization)
-    const maxChildren = Math.min(children.length, MAX_CHILDREN_PER_NODE);
-    for (let i = 0; i < maxChildren; i++) {
+    for (let i = 0; i < children.length; i++) {
       const child = children[i];
       const sr = child.shadowRoot;
       if (sr) {
-        const f = walk(sr, depth + 1);
+        const f = walk(sr);
         if (f) return f;
       }
-      const f2 = walk(child, depth + 1);
+      const f2 = walk(child);
       if (f2) return f2;
     }
     return null;
