@@ -284,7 +284,7 @@ function matchesHotkey(e, combo) {
         // If container exists but button doesn't, we need to recreate
         if (container && !existingBtn) {
           // Recreate floatUi if button was lost
-          if (!floatUi || !floatUi.querySelector('.pr-refine-btn')) {
+          if (!floatUi) {
             floatUi = createFloatingRefineUI(() => tryRefine(adapter));
           }
         }
@@ -539,15 +539,39 @@ prStyle.textContent = `
     }
   }
   
+  @keyframes pr-gentle-pulse-positioned {
+    0%, 100% { 
+      filter: brightness(1);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+      transform: translateY(-50%);
+    }
+    50% { 
+      filter: brightness(1.03);
+      box-shadow: 0 6px 20px rgba(124,58,237,0.2);
+      transform: translateY(-50%);
+    }
+  }
+  
   @keyframes pr-click-bounce {
     0% { transform: scale(1); }
     50% { transform: scale(0.92); }
     100% { transform: scale(1); }
   }
   
+  @keyframes pr-click-bounce-positioned {
+    0% { transform: translateY(-50%) scale(1); }
+    50% { transform: translateY(-50%) scale(0.92); }
+    100% { transform: translateY(-50%) scale(1); }
+  }
+  
   .pr-refine-btn.clicked {
     animation: pr-click-bounce 0.3s ease !important;
     transform-origin: center center;
+  }
+  
+  /* For ChatGPT, use positioned version of animation */
+  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn.clicked {
+    animation: pr-click-bounce-positioned 0.3s ease !important;
   }
   
   .pr-refine-btn {
@@ -557,12 +581,27 @@ prStyle.textContent = `
     transform-origin: center center;
   }
   
+  /* For ChatGPT, use positioned version of pulse animation */
+  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn {
+    animation: pr-gentle-pulse-positioned 3s ease-in-out infinite;
+  }
+  
   .pr-refine-btn:hover {
     animation: none;
   }
   
+  /* For ChatGPT, maintain positioning on hover */
+  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn:hover {
+    transform: translateY(-50%) !important;
+  }
+  
   .pr-refine-btn:hover.clicked {
     animation: pr-click-bounce 0.3s ease !important;
+  }
+  
+  /* For ChatGPT hover + clicked */
+  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn:hover.clicked {
+    animation: pr-click-bounce-positioned 0.3s ease !important;
   }
   
   .pr-refine-btn::before {
@@ -608,23 +647,35 @@ prStyle.textContent = `
     transform: translate(-50%, -50%) scale(1);
     opacity: 0.9;
   }
+  
+  /* CSS-only positioning for ChatGPT button */
+  .ms-auto.flex.items-center.gap-1\\.5 {
+    position: relative !important;
+  }
+  
+  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn {
+    position: absolute !important;
+    right: calc(100% + 6px) !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    white-space: nowrap;
+    z-index: 1000 !important;
+    pointer-events: auto !important;
+  }
+  
+  /* CSS-only positioning for Claude button */
+  .flex.gap-2\\.5.w-full.items-center > .pr-refine-btn {
+    order: -1;
+  }
 `;
 document.documentElement.appendChild(prStyle);
 
 
 // Create floating button that positions next to microphone
 function createFloatingRefineUI(onClick) {
-  const host = document.createElement('div');
-  host.className = 'pr-float-host';
-  host.style.position = 'fixed';
-  host.style.zIndex = '2147483646';
-  host.style.pointerEvents = 'none';
-  host.style.transition = 'top 0.15s ease, left 0.15s ease'; // Smooth position transitions
-  
   const btn = document.createElement('button');
   btn.className = 'pr-refine-btn';
   btn.textContent = 'Refine';
-  btn.style.position = 'relative';
   btn.style.background = 'linear-gradient(135deg, #7c3aed, #06b6d4)';
   btn.style.color = '#fff';
   btn.style.border = 'none';
@@ -636,7 +687,6 @@ function createFloatingRefineUI(onClick) {
   btn.style.transition = 'transform .2s ease, filter .2s ease, box-shadow .2s ease';
   btn.style.pointerEvents = 'auto';
   btn.style.overflow = 'visible';
-  btn.style.zIndex = '1';
   btn.style.transformOrigin = 'center center';
   
   btn.addEventListener('mouseenter', () => { 
@@ -647,10 +697,6 @@ function createFloatingRefineUI(onClick) {
     btn.style.filter = 'brightness(1)';
     btn.style.boxShadow = '0 6px 18px rgba(0,0,0,0.3)';
   });
-  btn.addEventListener('mousedown', () => { 
-    // Don't set transform here - let the click animation handle it
-  });
-  
   const triggerClickAnimation = () => {
     // Remove any existing transform and class
     btn.style.transform = '';
@@ -667,101 +713,82 @@ function createFloatingRefineUI(onClick) {
     });
   };
   
-  btn.addEventListener('mouseup', () => {
-    // Don't interfere with transform here
-  });
+  // Stop all mouse events from propagating to prevent triggering parent handlers
+  btn.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }, true); // Capture phase
+  
+  btn.addEventListener('mouseup', (e) => {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }, true); // Capture phase
   
   btn.addEventListener('click', (e) => { 
     e.stopPropagation();
+    e.preventDefault();
+    e.stopImmediatePropagation();
     triggerClickAnimation();
     onClick && onClick(); 
-  });
+  }, true); // Capture phase to catch event early and prevent bubbling
   
-  host.appendChild(btn);
-  document.body.appendChild(host);
-  return host;
+  return btn;
 }
 
-function positionFloatingUI_ChatGPT(host) {
-  if (!host) return;
+function positionFloatingUI_ChatGPT(btn) {
+  if (!btn) return;
   try {
     // Find the div with class "ms-auto flex items-center gap-1.5"
     const container = document.querySelector('.ms-auto.flex.items-center.gap-1\\.5');
     
     if (!container) {
-      host.style.display = 'none';
+      btn.style.display = 'none';
       return;
     }
     
-    // Get container position
-    const containerRect = container.getBoundingClientRect();
-    const btn = host.querySelector('.pr-refine-btn');
-    if (!btn) return;
+    // Check if button is already in the container
+    if (container.contains(btn)) {
+      btn.style.display = '';
+      return;
+    }
     
-    const btnRect = btn.getBoundingClientRect();
-    const btnWidth = btnRect.width || 60;
-    const btnHeight = btnRect.height || 28;
-    
-    // Position at the left edge of container, with gap-1.5 (6px) spacing
-    const gap = 6;
-    const x = containerRect.left - btnWidth - gap;
-    const y = containerRect.top + (containerRect.height / 2) - (btnHeight / 2);
-    
-    host.style.left = Math.round(x) + 'px';
-    host.style.top = Math.round(y) + 'px';
-    host.style.display = 'block';
+    // Insert button into container - CSS will handle positioning
+    container.insertBefore(btn, container.firstChild);
+    btn.style.display = '';
     
     try {
-      console.log('[promptiply] ChatGPT: Positioned floating button', {
-        x, y, btnWidth, btnHeight,
-        containerRect: { left: containerRect.left, top: containerRect.top, width: containerRect.width, height: containerRect.height }
-      });
+      console.log('[promptiply] ChatGPT: Inserted button into container (CSS positioning)');
     } catch(_) {}
   } catch (err) {
     try { console.error('[promptiply] ChatGPT position error:', err); } catch(_) {}
   }
 }
 
-function positionFloatingUI_Claude(host) {
-  if (!host) return;
+function positionFloatingUI_Claude(btn) {
+  if (!btn) return;
   try {
     // Find the div with class "flex gap-2.5 w-full items-center"
     const container = document.querySelector('.flex.gap-2\\.5.w-full.items-center');
     
     if (!container) {
-      host.style.display = 'none';
+      btn.style.display = 'none';
       return;
     }
     
-    // First check if button already exists in container (survived page change)
-    let btn = container.querySelector('.pr-refine-btn');
-    
-    if (btn) {
-      // Button is already in container, we're good
-      host.style.display = 'none';
+    // Check if button is already in container
+    if (container.contains(btn)) {
+      btn.style.display = '';
       return;
     }
     
-    // Button not in container, check if it's in the host
-    btn = host.querySelector('.pr-refine-btn');
-    
-    if (!btn) {
-      // Button doesn't exist at all - this shouldn't happen if update() ran first
-      // but handle it gracefully
-      host.style.display = 'none';
-      return;
-    }
-    
-    // Button exists in host but not in container - insert it
-    // This handles the case when container gets replaced (e.g., after sending message)
+    // Insert button into container - CSS will handle positioning
     container.insertBefore(btn, container.firstChild);
-    host.style.display = 'none';
+    btn.style.display = '';
     
     try {
       console.log('[promptiply] Claude: Inserted button into container', {
         containerClass: container.className,
-        childCount: container.children.length,
-        wasReinserted: true
+        childCount: container.children.length
       });
     } catch(_) {}
   } catch (err) {
