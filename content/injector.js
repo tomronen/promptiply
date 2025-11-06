@@ -267,11 +267,18 @@ function matchesHotkey(e, combo) {
     const MIN_UPDATE_INTERVAL = 200; // Minimum 200ms between updates
     
     const update = () => {
-      // Debounce: prevent excessive calls
+      // Clear any pending timeout
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+        updateTimeout = null;
+      }
+      
+      // Debounce: check if we need to delay
       const now = Date.now();
-      if (now - lastUpdateTime < MIN_UPDATE_INTERVAL) {
-        if (updateTimeout) clearTimeout(updateTimeout);
-        updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL);
+      const timeSinceLastUpdate = now - lastUpdateTime;
+      if (timeSinceLastUpdate < MIN_UPDATE_INTERVAL) {
+        // Schedule update for later, ensuring we wait the full interval
+        updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL - timeSinceLastUpdate);
         return;
       }
       lastUpdateTime = now;
@@ -299,8 +306,10 @@ function matchesHotkey(e, combo) {
     update();
     // Use throttled MutationObserver: observe only childList, not all attributes
     const mo = new MutationObserver(() => {
-      if (updateTimeout) clearTimeout(updateTimeout);
-      updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL);
+      // Throttle MutationObserver callbacks to reduce overhead
+      if (!updateTimeout) {
+        updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL);
+      }
     });
     // Observe only childList changes, not attributes (less aggressive)
     mo.observe(document.documentElement, { subtree: true, childList: true });
@@ -571,6 +580,7 @@ function positionFloatingUI(host, inputEl) {
 function deepQuerySelector(selector, root = document) {
   const seen = new Set();
   const MAX_DEPTH = 15; // Limit recursion depth to prevent performance issues
+  const MAX_CHILDREN_PER_NODE = 50; // Limit children processed per node for performance
   
   function walk(node, depth = 0) {
     if (!node || seen.has(node) || depth > MAX_DEPTH) return null;
@@ -581,7 +591,7 @@ function deepQuerySelector(selector, root = document) {
     } catch (_) {}
     const children = node.children || [];
     // Early exit if too many children (performance optimization)
-    const maxChildren = Math.min(children.length, 50);
+    const maxChildren = Math.min(children.length, MAX_CHILDREN_PER_NODE);
     for (let i = 0; i < maxChildren; i++) {
       const child = children[i];
       const sr = child.shadowRoot;
