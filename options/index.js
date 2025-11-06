@@ -43,18 +43,46 @@
   }
 
   // Tabs behavior
+  let currentTab = 'general';
+  const tabOrder = ['general', 'providers', 'profiles'];
+  
   $tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.tab)));
+  
   function selectTab(name){
+    if (name === currentTab) return;
+    
+    const currentIndex = tabOrder.indexOf(currentTab);
+    const newIndex = tabOrder.indexOf(name);
+    const direction = newIndex > currentIndex ? 'right' : 'left';
+    
+    // Get current and new panels
+    const currentPanel = $tabPanels[currentTab];
+    const newPanel = $tabPanels[name];
+    
+    if (currentPanel && newPanel) {
+      // Slide out current panel
+      currentPanel.classList.remove('slide-in-from-left', 'slide-in-from-right');
+      currentPanel.classList.add(direction === 'right' ? 'slide-out-to-left' : 'slide-out-to-right');
+      
+      // After slide-out completes, hide current and show new
+      setTimeout(() => {
+        currentPanel.classList.add('tab-panel-hidden');
+        currentPanel.classList.remove('slide-out-to-left', 'slide-out-to-right');
+        
+        // Show new panel with slide-in animation
+        newPanel.classList.remove('tab-panel-hidden');
+        newPanel.classList.add(direction === 'right' ? 'slide-in-from-right' : 'slide-in-from-left');
+        
+        // Clean up animation classes after slide-in completes
+        setTimeout(() => {
+          newPanel.classList.remove('slide-in-from-left', 'slide-in-from-right');
+        }, 150);
+      }, 150);
+    }
+    
+    // Update tab buttons
     $tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-    Object.entries($tabPanels).forEach(([k, el]) => { 
-      if (el) {
-        if (k === name) {
-          el.classList.remove('tab-panel-hidden');
-        } else {
-          el.classList.add('tab-panel-hidden');
-        }
-      }
-    });
+    currentTab = name;
   }
 
   function updateProviderDisabled() {
