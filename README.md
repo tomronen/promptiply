@@ -36,6 +36,7 @@ Notes
 
 Acknowledgments
 ---------------
-Local mode is powered by [web-llm](https://github.com/mlc-ai/web-llm), a high-performance in-browser LLM inference engine by the MLC AI team. Thank you for making private, offline LLM inference possible in the browser!
+Local mode is powered by [web-llm](https://github.com/mlc-ai/web-llm), a high-performance in-browser LLM inference engine by the MLC AI team. Thank you for making private, offline LLM inference possible in the browser! 
+
 
 

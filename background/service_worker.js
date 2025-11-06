@@ -39,11 +39,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     handleRefinement(msg.payload, sender).then((res) => {
       activeRefinementTabId = null;
+      console.log('[promptiply:bg] Sending response back to content script:', {
+        ok: true,
+        status: 'ok',
+        refinedLength: res?.length || 0,
+        refinedPreview: res?.slice(0, 100)
+      });
       sendResponse({ ok: true, status: 'ok', refined: res });
     }).catch((err) => {
       activeRefinementTabId = null;
       console.error('[promptiply:bg] Refinement error:', err);
-      sendResponse({ ok: false, err: String(err.message || err) });
+      sendResponse({ ok: false, err: String(err.message || err), error: String(err.message || err) });
     });
     return true; // Keep channel open for async response
   }
@@ -432,6 +438,11 @@ async function refineViaWebUI({ site, system, user }) {
         isEmpty: !result || result.trim().length === 0,
         site
       });
+
+      // Add a small delay to ensure the result is fully captured before closing the tab
+      await new Promise(r => setTimeout(r, 500));
+      console.log('[promptiply:bg] Waited 500ms before closing tab to ensure result is captured');
+
     } catch (e) {
       console.error('[promptiply:bg] WebUI automation error:', e);
       result = '';
@@ -460,6 +471,13 @@ async function refineViaWebUI({ site, system, user }) {
       isEmpty: !finalResult || finalResult.trim().length === 0,
       site
     });
+
+    // If we got an empty result, return the original prompt as fallback
+    if (!finalResult || finalResult.trim().length === 0) {
+      console.warn('[promptiply:bg] WebUI automation returned empty result, using original prompt as fallback');
+      return user; // Return the original user prompt
+    }
+
     return finalResult;
   } catch (e) {
     console.error('[promptiply:bg] WebUI outer error:', e);
@@ -500,10 +518,15 @@ async function automateRefinement(site, composed) {
       await delay(1000);
 
       // Try ChatGPT input selectors - can be textarea or contenteditable
+      // Updated selectors for latest ChatGPT UI (as of 2025)
       const selectors = [
-        '#prompt-textarea.ProseMirror[contenteditable="true"]',
-        '#prompt-textarea[contenteditable="true"]',
+        '#prompt-textarea',
+        'div[contenteditable="true"][data-id="root"]',
+        '#composer-background textarea',
         '.ProseMirror[contenteditable="true"]',
+        '[data-testid="composer-input"]',
+        'textarea[placeholder*="Message"]',
+        'div[contenteditable="true"]',
         'textarea[data-id]',
         'textarea'
       ];
@@ -547,9 +570,22 @@ async function automateRefinement(site, composed) {
       }
       await delay(200);
 
-      // Find and click send button
+      // Find and click send button - Updated selectors for latest ChatGPT UI
       let sendBtn = null;
-      sendBtn = document.querySelector('button[data-testid="send-button"], button[aria-label*="Send"], form button[type="submit"]');
+      const sendBtnSelectors = [
+        'button[data-testid="send-button"]',
+        'button[data-testid="composer-send-button"]',
+        'button[aria-label="Send message"]',
+        'button[aria-label*="Send"]',
+        'button.absolute.rounded-lg',
+        'form button[type="submit"]'
+      ];
+
+      for (const sel of sendBtnSelectors) {
+        sendBtn = document.querySelector(sel);
+        if (sendBtn && !sendBtn.disabled) break;
+      }
+
       if (!sendBtn) {
         const form = input.closest('form');
         if (form) sendBtn = form.querySelector('button[type="submit"], button:not([disabled])');
@@ -642,9 +678,13 @@ async function automateRefinement(site, composed) {
       await delay(300);
 
       // Try Claude's ProseMirror input first, then fallback
+      // Updated selectors for latest Claude UI (as of 2025)
       const selectors = [
-        '.ProseMirror[contenteditable="true"]',
+        'div.ProseMirror[contenteditable="true"]',
+        'div[contenteditable="true"][placeholder*="Reply"]',
+        'div[contenteditable="true"][data-placeholder]',
         '[contenteditable="true"][role="textbox"]',
+        '.ProseMirror[contenteditable="true"]',
         '[contenteditable="true"]'
       ];
       let input = null;
