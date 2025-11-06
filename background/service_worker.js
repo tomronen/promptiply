@@ -1,5 +1,7 @@
 // promptiply background service worker
 // Note: Service workers can't use ES6 imports, so we'll load the handler dynamically
+const STORAGE_PROFILES = 'profiles';
+
 let activeRefinementTabId = null;
 let mlcEngineHandler = null;
 let ExtensionServiceWorkerMLCEngineHandler = null;
@@ -423,6 +425,7 @@ async function refineViaWebUI({ site, system, user }) {
       isEmpty: !finalResult || finalResult.trim().length === 0,
       site
     });
+    receive_tags(finalResult)
     return finalResult;
   } catch (e) {
     console.error('[promptiply:bg] WebUI outer error:', e);
@@ -438,6 +441,21 @@ async function refineViaWebUI({ site, system, user }) {
     }
     return '';
   }
+}
+
+async function receive_tags(result){
+  const new_tags = [...result.matchAll(/#promptiply_tag_([A-Za-z0-9_-]+)/g)].map(match => match[1].toLowerCase().replace(' ','_'));
+  const profiles = await new Promise((resolve) => {
+    chrome.storage.sync.get(['profiles'], (data) => {
+      resolve(data.profiles);
+    });
+  });
+  const activeProfile = profiles.list.find(p => p.id === profiles.activeProfileId) || null;
+  const tags_set = new Set(new_tags.concat(activeProfile.domainTags));
+  activeProfile.domainTags = Array.from(tags_set);
+  const updated = { ...profiles, activeProfileId: activeProfile.id };
+  chrome.storage.sync.set({ [STORAGE_PROFILES]: updated });
+  
 }
 
 async function waitForTabComplete(tabId) {
@@ -1057,7 +1075,12 @@ CRITICAL INSTRUCTIONS:
 7. Improve clarity, structure, and effectiveness while keeping the exact same intent
 8. If the original prompt is already good, make only minor improvements rather than rewriting it completely
 9. Start your response directly with the refined prompt - no introductory text
-10. Transform conversational prompts into clear, actionable prompts (e.g., "I want X" → "Provide a comprehensive guide/tutorial/explanation for X...")`;
+10. Transform conversational prompts into clear, actionable prompts (e.g., "I want X" → "Provide a comprehensive guide/tutorial/explanation for X...")
+
+METADATA TAGGING:
+At the end of the prompt add #promptiply_tag_<TAGNAME> for every useful tag that you think could help in refining the profile in the future.
+
+`;
 
   if (!profile) {
     return baseSystemPrompt;
@@ -1070,6 +1093,9 @@ CRITICAL INSTRUCTIONS:
   if (profile.tone) parts.push(`Target tone: ${profile.tone}`);
   if (profile.styleGuidelines && profile.styleGuidelines.length > 0) {
     parts.push(`Style guidelines: ${profile.styleGuidelines.join('; ')}`);
+  }
+  if (profile.domainTags && profile.domainTags.length > 0) {
+    parts.push(`Relevant domains/tags: ${profile.domainTags.join(', ')}`);
   }
   
   parts.push('\nRefine the user\'s prompt so that when used, it will generate responses that match the profile above. Preserve the original intent while improving clarity, structure, and effectiveness.');
