@@ -480,7 +480,7 @@ async function refineViaWebUI({ site, system, user }) {
       return user; // Return the original user prompt
     }
 
-    return await receive_tags(finalResult)
+    return finalResult
   } catch (e) {
     console.error('[promptiply:bg] WebUI outer error:', e);
     // Ensure tab is closed even on outer error
@@ -1153,9 +1153,6 @@ CRITICAL INSTRUCTIONS:
 8. If the original prompt is already good, make only minor improvements rather than rewriting it completely
 9. Start your response directly with the refined prompt - no introductory text
 10. Transform conversational prompts into clear, actionable prompts (e.g., "I want X" → "Provide a comprehensive guide/tutorial/explanation for X...")
-
-METADATA TAGGING:
-At the end of the prompt add #promptiply_tag_<TAGNAME> for every useful tag that you think could help in refining the profile in the future.
 
 `;
 
