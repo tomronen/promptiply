@@ -2,7 +2,7 @@
 * { box-sizing: border-box; }
 html { overflow: visible; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; width: 360px; background: var(--bg); color: var(--text); overflow: visible; }
-.container { padding: 14px; position: relative; overflow: visible; }
+.container { padding: 14px 14px 42px 14px; position: relative; overflow: visible; }
 .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
 .title { display:flex; gap:8px; align-items:center; font-weight:700; }
 .badge { background: linear-gradient(135deg, var(--accent), var(--accent-2)); padding:2px 8px; border-radius:999px; font-size:11px; }
