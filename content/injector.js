@@ -554,10 +554,7 @@ function createFloatingRefineUI(onClick) {
   style.textContent = `
     :host { all: initial; display: none; pointer-events: none; }
     :host(.pr-pos-hidden) { display: none !important; }
-    :host(.pr-pos-br) { position: fixed; right: 16px; bottom: 16px; display: block; }
-    :host(.pr-pos-tr) { position: fixed; right: 16px; top: 16px; display: block; }
-    :host(.pr-pos-bl) { position: fixed; left: 16px; bottom: 16px; display: block; }
-    :host(.pr-pos-tl) { position: fixed; left: 16px; top: 16px; display: block; }
+    :host(.pr-pos-positioned) { position: fixed; display: block; z-index: 1000; }
     .wrap { pointer-events: auto; }
     .btn { background: linear-gradient(135deg, #7c3aed, #06b6d4); color:#fff; border:none; border-radius: 10px; padding:6px 10px; font-size:12px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.3); transition:transform .15s ease, filter .15s ease; }
     .btn:hover { filter: brightness(1.06); }
@@ -581,20 +578,23 @@ function positionFloatingUI(host, inputEl) {
   try {
     const target = document.activeElement && document.activeElement.isSameNode(inputEl) ? document.activeElement : inputEl;
     const rect = target.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const rightHalf = centerX > window.innerWidth / 2;
-    const bottomHalf = centerY > window.innerHeight / 2;
-    host.classList.remove('pr-pos-br', 'pr-pos-tr', 'pr-pos-bl', 'pr-pos-tl', 'pr-pos-hidden');
-    if (rightHalf && bottomHalf) host.classList.add('pr-pos-br');
-    else if (rightHalf && !bottomHalf) host.classList.add('pr-pos-tr');
-    else if (!rightHalf && bottomHalf) host.classList.add('pr-pos-bl');
-    else host.classList.add('pr-pos-tl');
+    
+    // Position button inside the input area, at the bottom-right corner
+    // Add some padding from the edges
+    const rightPos = window.innerWidth - rect.right + 8;
+    const bottomPos = window.innerHeight - rect.bottom + 8;
+    
+    host.style.right = `${rightPos}px`;
+    host.style.bottom = `${bottomPos}px`;
+    
+    host.classList.remove('pr-pos-hidden');
+    host.classList.add('pr-pos-positioned');
+    
     try { 
       console.debug('[promptiply] Positioned button:', {
-        position: rightHalf ? (bottomHalf ? 'bottom-right' : 'top-right') : (bottomHalf ? 'bottom-left' : 'top-left'),
+        position: 'inside input field (bottom-right)',
         inputRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-        windowSize: { width: window.innerWidth, height: window.innerHeight }
+        buttonPos: { right: rightPos, bottom: bottomPos }
       });
     } catch(_) {}
   } catch (_) {}
