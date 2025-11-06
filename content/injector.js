@@ -126,8 +126,28 @@ function matchesHotkey(e, combo) {
     return;
   }
 
-  // Observe input area and inject button
-  initInjection(adapter);
+  // Wait for critical page resources to load before initializing
+  // This prevents interference with ChatGPT's initialization sequence
+  function waitForPageReady() {
+    return new Promise((resolve) => {
+      // If document is already complete, wait a bit more
+      if (document.readyState === 'complete') {
+        setTimeout(resolve, 300); // Reduced from 500ms to 300ms
+        return;
+      }
+      
+      // Otherwise wait for load event
+      window.addEventListener('load', () => {
+        setTimeout(resolve, 300); // Reduced from 500ms to 300ms
+      }, { once: true });
+    });
+  }
+
+  // Initialize after page is ready
+  waitForPageReady().then(() => {
+    // Observe input area and inject button
+    initInjection(adapter);
+  });
 
   // Register hotkey from settings (platform-aware default)
   function getDefaultHotkey() {
@@ -242,7 +262,27 @@ function matchesHotkey(e, combo) {
     let floatUi = null;
     let observedInput = null;
     let ro = null;
+    let updateTimeout = null;
+    let lastUpdateTime = 0;
+    const MIN_UPDATE_INTERVAL = 200; // Minimum 200ms between updates
+    
     const update = () => {
+      // Clear any pending timeout
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+        updateTimeout = null;
+      }
+      
+      // Debounce: check if we need to delay
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastUpdateTime;
+      if (timeSinceLastUpdate < MIN_UPDATE_INTERVAL) {
+        // Schedule update for later, ensuring we wait the full interval
+        updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL - timeSinceLastUpdate);
+        return;
+      }
+      lastUpdateTime = now;
+      
       const inputEl = adapter.findInput();
       if (!inputEl) {
         if (floatUi) floatUi.classList.add('pr-pos-hidden');
@@ -261,22 +301,47 @@ function matchesHotkey(e, combo) {
         } catch(_) {}
       }
     };
+    
+    // Position update for scroll/resize (bypasses debouncing for better responsiveness)
+    const updatePosition = () => {
+      if (floatUi && observedInput) {
+        positionFloatingUI(floatUi, observedInput);
+      }
+    };
 
     // Initial attempt + observe
     update();
-    const mo = new MutationObserver(() => update());
-    mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    // Also poll briefly during first seconds to catch late mounts
+    // Use throttled MutationObserver: observe only childList, not all attributes
+    const mo = new MutationObserver(() => {
+      // Throttle MutationObserver callbacks to reduce overhead
+      if (!updateTimeout) {
+        updateTimeout = setTimeout(update, MIN_UPDATE_INTERVAL);
+      }
+    });
+    // Observe only childList changes, not attributes (less aggressive)
+    mo.observe(document.documentElement, { subtree: true, childList: true });
+    // Use direct position update for scroll/resize to ensure button stays correctly positioned
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    // Also poll more aggressively during first seconds to catch late mounts
     let tries = 0;
-    const iv = setInterval(() => { tries++; update(); if (tries > 60) clearInterval(iv); }, 250);
+    const iv = setInterval(() => { 
+      tries++; 
+      update(); 
+      if (tries > 80) clearInterval(iv);
+    }, 150); // More frequent polling: every 150ms for up to 12 seconds
   }
 
   async function tryRefine(adapter) {
     const raw = adapter.readInput();
     if (!raw || !raw.trim()) {
-      try { console.warn('[promptiply] Refine hotkey used but no prompt detected (empty input).'); } catch(_) {}
+      try { 
+        console.warn('[promptiply] Refine triggered but no prompt text found.');
+        console.debug('[promptiply] Input element search:', {
+          found: !!adapter.findInput(),
+          inputElement: adapter.findInput()
+        });
+      } catch(_) {}
       return;
     }
     try { console.log('[promptiply] Sending refinement request', { len: raw.length, preview: raw.slice(0,100) }); } catch(_) {}
@@ -525,29 +590,40 @@ function positionFloatingUI(host, inputEl) {
     else if (rightHalf && !bottomHalf) host.classList.add('pr-pos-tr');
     else if (!rightHalf && bottomHalf) host.classList.add('pr-pos-bl');
     else host.classList.add('pr-pos-tl');
-    try { console.debug('[promptiply] Positioning refine button rect', rect); } catch(_) {}
+    try { 
+      console.debug('[promptiply] Positioned button:', {
+        position: rightHalf ? (bottomHalf ? 'bottom-right' : 'top-right') : (bottomHalf ? 'bottom-left' : 'top-left'),
+        inputRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        windowSize: { width: window.innerWidth, height: window.innerHeight }
+      });
+    } catch(_) {}
   } catch (_) {}
 }
 
-// Deep query that traverses open shadow roots
+// Deep query that traverses open shadow roots (with depth limit to prevent excessive recursion)
 function deepQuerySelector(selector, root = document) {
   const seen = new Set();
-  function walk(node) {
-    if (!node || seen.has(node)) return null;
+  const MAX_DEPTH = 15; // Limit recursion depth to prevent performance issues
+  const MAX_CHILDREN_PER_NODE = 50; // Limit children processed per node for performance
+  
+  function walk(node, depth = 0) {
+    if (!node || seen.has(node) || depth > MAX_DEPTH) return null;
     seen.add(node);
     try {
       const found = node.querySelector?.(selector);
       if (found) return found;
     } catch (_) {}
     const children = node.children || [];
-    for (let i = 0; i < children.length; i++) {
+    // Early exit if too many children (performance optimization)
+    const maxChildren = Math.min(children.length, MAX_CHILDREN_PER_NODE);
+    for (let i = 0; i < maxChildren; i++) {
       const child = children[i];
       const sr = child.shadowRoot;
       if (sr) {
-        const f = walk(sr);
+        const f = walk(sr, depth + 1);
         if (f) return f;
       }
-      const f2 = walk(child);
+      const f2 = walk(child, depth + 1);
       if (f2) return f2;
     }
     return null;

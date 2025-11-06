@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- **ChatGPT Initialization Issue**: Fixed extension causing ChatGPT to get stuck during page load
+  - Added 500ms initialization delay to prevent interference with ChatGPT's critical startup requests
+  - Implemented debouncing (200ms interval) for DOM update function to reduce overhead
+  - Optimized MutationObserver to only watch childList changes (removed attribute observation)
+  - Added depth limit (15 levels) and max children limit (50 per node) to deepQuerySelector to prevent excessive recursion
+  - These changes prevent the extension from interfering with ChatGPT's `/ces/v1/projects/oai/settings` request and other initialization calls
+
 ### Added
 - **Predefined Profiles System**: Three built-in profiles (Technical Writer, Dev Helper, Marketing Copy) with import functionality
 - **Restore Defaults**: Remove imported predefined profiles with confirmation modal and 10-second undo
