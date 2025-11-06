@@ -1231,8 +1231,8 @@ async function refineWithLocal({ system, user }) {
     // Send message to offscreen document
     const response = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('Local refinement timeout (60s)'));
-      }, 120000); // 120 second timeout (longer for initial model download)
+        reject(new Error('Local refinement timeout (30 minutes)'));
+      }, 1800000); // 30 minute timeout (allows for slow internet connections during model download)
 
       chrome.runtime.sendMessage(
         {
