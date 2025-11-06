@@ -449,6 +449,9 @@ function matchesHotkey(e, combo) {
     }
   }
 
+  // Escape key handler for overlay
+  let overlayEscapeHandler = null;
+
   // Minimal overlay for scaffolding
   function showOverlay(opts) {
     let el = document.querySelector('.pr-overlay');
@@ -516,11 +519,28 @@ function matchesHotkey(e, combo) {
       actions.appendChild(cancel);
     }
     el.style.display = 'block';
+    
+    // Add Escape key listener
+    if (overlayEscapeHandler) {
+      document.removeEventListener('keydown', overlayEscapeHandler);
+    }
+    overlayEscapeHandler = (e) => {
+      if (e.key === 'Escape') {
+        hideOverlay();
+      }
+    };
+    document.addEventListener('keydown', overlayEscapeHandler);
   }
 
   function hideOverlay() {
     const el = document.querySelector('.pr-overlay');
     if (el) el.style.display = 'none';
+    
+    // Remove Escape key listener
+    if (overlayEscapeHandler) {
+      document.removeEventListener('keydown', overlayEscapeHandler);
+      overlayEscapeHandler = null;
+    }
   }
 })();
 // Animations
@@ -552,26 +572,66 @@ prStyle.textContent = `
     }
   }
   
-  @keyframes pr-click-bounce {
-    0% { transform: scale(1); }
-    50% { transform: scale(0.92); }
-    100% { transform: scale(1); }
+  @keyframes pr-menu-fade-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95) translateY(-5px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
   
-  @keyframes pr-click-bounce-positioned {
-    0% { transform: translateY(-50%) scale(1); }
-    50% { transform: translateY(-50%) scale(0.92); }
-    100% { transform: translateY(-50%) scale(1); }
+  @keyframes pr-menu-fade-out {
+    from {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.95) translateY(-5px);
+    }
   }
   
-  .pr-refine-btn.clicked {
-    animation: pr-click-bounce 0.3s ease !important;
-    transform-origin: center center;
+  .pr-portal {
+    position: fixed;
+    inset: 10px; /* Creates safe zone - portal is 10px smaller than viewport */
+    pointer-events: none;
+    z-index: 10000;
   }
   
-  /* For ChatGPT, use positioned version of animation */
-  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn.clicked {
-    animation: pr-click-bounce-positioned 0.3s ease !important;
+  .pr-portal > * {
+    pointer-events: auto;
+  }
+  
+  .pr-profile-menu {
+    animation: pr-menu-fade-in 0.2s ease forwards;
+    position: absolute; /* Relative to portal */
+    background: #0b1220;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    padding: 6px;
+    min-width: 180px;
+    max-width: 100%; /* Can't exceed portal width */
+    max-height: 100%; /* Can't exceed portal height */
+    overflow-y: auto;
+    cursor: default;
+  }
+  
+  /* Sticky title */
+  .pr-profile-menu > div:first-child {
+    position: sticky;
+    top: 0;
+    background: #0b1220;
+    z-index: 1;
+    cursor: default;
+    user-select: none;
+  }
+  
+  .pr-profile-menu.closing {
+    animation: pr-menu-fade-out 0.2s ease forwards;
   }
   
   .pr-refine-btn {
@@ -579,6 +639,7 @@ prStyle.textContent = `
     overflow: visible;
     animation: pr-gentle-pulse 3s ease-in-out infinite;
     transform-origin: center center;
+    transition: transform 0.15s ease, filter 0.2s ease, box-shadow 0.2s ease;
   }
   
   /* For ChatGPT, use positioned version of pulse animation */
@@ -586,22 +647,30 @@ prStyle.textContent = `
     animation: pr-gentle-pulse-positioned 3s ease-in-out infinite;
   }
   
+  /* CSS-only hover effects */
   .pr-refine-btn:hover {
     animation: none;
+    filter: brightness(1.1);
+    box-shadow: 0 4px 12px rgba(124,58,237,0.5);
   }
   
   /* For ChatGPT, maintain positioning on hover */
   .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn:hover {
     transform: translateY(-50%) !important;
+    animation: none;
+    filter: brightness(1.1);
+    box-shadow: 0 4px 12px rgba(124,58,237,0.5);
   }
   
-  .pr-refine-btn:hover.clicked {
-    animation: pr-click-bounce 0.3s ease !important;
+  /* CSS-only click animation using :active */
+  .pr-refine-btn:active {
+    transform: scale(0.92);
+    transition: transform 0.1s ease;
   }
   
-  /* For ChatGPT hover + clicked */
-  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn:hover.clicked {
-    animation: pr-click-bounce-positioned 0.3s ease !important;
+  /* For ChatGPT, combine positioning with active state */
+  .ms-auto.flex.items-center.gap-1\\.5 > .pr-refine-btn:active {
+    transform: translateY(-50%) scale(0.92) !important;
   }
   
   .pr-refine-btn::before {
@@ -688,51 +757,228 @@ function createFloatingRefineUI(onClick) {
   btn.style.pointerEvents = 'auto';
   btn.style.overflow = 'visible';
   btn.style.transformOrigin = 'center center';
+  // Hover and active states are handled by CSS :hover and :active pseudo-classes
   
-  btn.addEventListener('mouseenter', () => { 
-    btn.style.filter = 'brightness(1.1)';
-    btn.style.boxShadow = '0 4px 12px rgba(124,58,237,0.5)';
-  });
-  btn.addEventListener('mouseleave', () => { 
-    btn.style.filter = 'brightness(1)';
-    btn.style.boxShadow = '0 6px 18px rgba(0,0,0,0.3)';
-  });
-  const triggerClickAnimation = () => {
-    // Remove any existing transform and class
-    btn.style.transform = '';
-    btn.classList.remove('clicked');
-    // Force reflow to ensure DOM updates
-    void btn.offsetWidth;
-    // Use requestAnimationFrame to ensure animation starts
-    requestAnimationFrame(() => {
-      btn.classList.add('clicked');
-      // Remove class after animation completes
-      setTimeout(() => {
-        btn.classList.remove('clicked');
-      }, 300);
-    });
-  };
-  
-  // Stop all mouse events from propagating to prevent triggering parent handlers
-  btn.addEventListener('mousedown', (e) => {
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-  }, true); // Capture phase
-  
-  btn.addEventListener('mouseup', (e) => {
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-  }, true); // Capture phase
-  
+  // Stop click event from propagating to prevent triggering parent handlers
+  // Use capture phase to catch it early, but allow mousedown/mouseup to complete normally
+  // CSS :active handles the visual animation automatically
   btn.addEventListener('click', (e) => { 
     e.stopPropagation();
     e.preventDefault();
     e.stopImmediatePropagation();
-    triggerClickAnimation();
     onClick && onClick(); 
   }, true); // Capture phase to catch event early and prevent bubbling
   
+  // Also handle touch events for mobile
+  btn.addEventListener('touchend', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    onClick && onClick();
+  }, true);
+  
+  // Also stop propagation in bubble phase as backup
+  btn.addEventListener('click', (e) => { 
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }, false);
+  
+  // Right-click context menu for profile selection
+  btn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    showProfileContextMenu(btn, e.clientX, e.clientY);
+  }, true);
+  
   return btn;
+}
+
+// Context menu for profile selection
+let profileContextMenu = null;
+let portalContainer = null;
+
+// Create portal container once on page load
+function getPortalContainer() {
+  if (!portalContainer) {
+    portalContainer = document.createElement('div');
+    portalContainer.className = 'pr-portal';
+    // Ensure portal styles are applied
+    portalContainer.style.cssText = 'position: fixed; inset: 10px; pointer-events: none; z-index: 10000;';
+    document.body.appendChild(portalContainer);
+  }
+  return portalContainer;
+}
+
+// Helper function to create profile options (DRY principle)
+function createProfileOption(text, profileId, isActive, onClick) {
+  const option = document.createElement('div');
+  option.className = 'pr-profile-option';
+  option.style.cssText = `
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #e5e7eb;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    ${isActive ? 'background: rgba(124,58,237,0.2); font-weight: 500;' : ''}
+  `;
+  
+  const profileText = document.createElement('span');
+  profileText.textContent = text;
+  option.appendChild(profileText);
+  
+  if (isActive) {
+    const checkmark = document.createElement('span');
+    checkmark.textContent = '✓';
+    checkmark.style.cssText = 'color: #7c3aed; font-weight: bold; font-size: 14px;';
+    option.appendChild(checkmark);
+  }
+  
+  option.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    onClick();
+  });
+  
+  option.addEventListener('mouseenter', () => {
+    if (!isActive) option.style.background = '#0f172a';
+  });
+  
+  option.addEventListener('mouseleave', () => {
+    if (!isActive) option.style.background = 'transparent';
+  });
+  
+  return option;
+}
+
+function showProfileContextMenu(button, x, y) {
+  if (profileContextMenu) {
+    profileContextMenu.remove();
+    profileContextMenu = null;
+  }
+  
+  const portal = getPortalContainer();
+  
+  profileContextMenu = document.createElement('div');
+  profileContextMenu.className = 'pr-profile-menu';
+  
+  // Build title
+  const title = document.createElement('div');
+  title.textContent = 'Select Profile';
+  title.style.cssText = 'padding: 8px 10px; font-size: 11px; font-weight: 600; color: #94a3b8; border-bottom: 1px solid #1e293b; margin-bottom: 4px; cursor: default; user-select: none;';
+  profileContextMenu.appendChild(title);
+  
+  // Prevent right-click on the menu
+  profileContextMenu.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }, true);
+  
+  // Append to portal
+  portal.appendChild(profileContextMenu);
+  
+  chrome.storage.sync.get(['profiles'], (data) => {
+    const profiles = data.profiles || { list: [], activeProfileId: null };
+    const activeProfileId = profiles.activeProfileId;
+    
+    profileContextMenu.appendChild(createProfileOption(
+      '(no profile)', null, activeProfileId === null,
+      () => { updateActiveProfile(null); hideProfileContextMenu(); }
+    ));
+    
+    profiles.list.forEach((profile) => {
+      profileContextMenu.appendChild(createProfileOption(
+        profile.name || profile.id, profile.id, profile.id === activeProfileId,
+        () => { updateActiveProfile(profile.id); hideProfileContextMenu(); }
+      ));
+    });
+    
+    // Position within portal (coordinates are now relative to portal, not viewport)
+    requestAnimationFrame(() => {
+      if (!profileContextMenu) return;
+      const portalRect = portal.getBoundingClientRect();
+      const menuRect = profileContextMenu.getBoundingClientRect();
+      
+      // Convert viewport click coordinates to portal-relative coordinates
+      let left = x - portalRect.left;
+      let top = y - portalRect.top;
+      
+      // Clamp to ensure menu stays fully within portal bounds with 10px margin
+      // left must be >= 10 (menu's left edge at least 10px from portal's left edge)
+      // left + menuWidth must be <= portalWidth - 10 (menu's right edge at least 10px from portal's right edge)
+      const margin = 10;
+      const maxLeft = portalRect.width - menuRect.width - margin;
+      const maxTop = portalRect.height - menuRect.height - margin;
+      
+      // Clamp values with 10px margin from all edges
+      // If menu is too large, still maintain margin on left/top and let it overflow on right/bottom
+      left = Math.max(margin, Math.min(left, Math.max(margin, maxLeft)));
+      top = Math.max(margin, Math.min(top, Math.max(margin, maxTop)));
+      
+      // Apply position
+      profileContextMenu.style.left = `${left}px`;
+      profileContextMenu.style.top = `${top}px`;
+    });
+  });
+  
+  // Close handlers
+  const closeMenu = (e) => {
+    if (profileContextMenu && !profileContextMenu.contains(e.target) && e.target !== button) {
+      hideProfileContextMenu();
+      cleanup();
+    }
+  };
+  
+  const closeMenuOnEscape = (e) => {
+    if (e.key === 'Escape' && profileContextMenu) {
+      hideProfileContextMenu();
+      cleanup();
+    }
+  };
+  
+  const cleanup = () => {
+    document.removeEventListener('click', closeMenu, true);
+    document.removeEventListener('contextmenu', closeMenu, true);
+    document.removeEventListener('keydown', closeMenuOnEscape);
+  };
+  
+  setTimeout(() => {
+    document.addEventListener('click', closeMenu, true);
+    document.addEventListener('contextmenu', closeMenu, true);
+    document.addEventListener('keydown', closeMenuOnEscape);
+  }, 0);
+}
+
+function hideProfileContextMenu() {
+  if (profileContextMenu) {
+    // Add closing class to trigger CSS animation
+    profileContextMenu.classList.add('closing');
+    setTimeout(() => {
+      if (profileContextMenu) {
+        profileContextMenu.remove();
+        profileContextMenu = null;
+      }
+    }, 200);
+  }
+}
+
+function updateActiveProfile(profileId) {
+  chrome.storage.sync.get(['profiles'], (data) => {
+    const profiles = data.profiles || { list: [], activeProfileId: null };
+    profiles.activeProfileId = profileId;
+    chrome.storage.sync.set({ profiles }, () => {
+      try {
+        console.log('[promptiply] Active profile updated:', profileId);
+      } catch(_) {}
+    });
+  });
 }
 
 function positionFloatingUI_ChatGPT(btn) {
