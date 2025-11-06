@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "promptiply",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "promptiply refines prompts inline on ChatGPT and Claude using profiles and API/WebUI/Local modes.",
   "icons": {
     "16": "icons/icon-16.png",
