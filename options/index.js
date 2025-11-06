@@ -1727,12 +1727,17 @@
 
         const tab = target.closest(".tab");
         if (tab && tab.dataset && tab.dataset.tab) {
+          // Skip if already has direct listener
+          if (tab.dataset.prAttached) return;
           console.log("[promptiply] delegated tab click ->", tab.dataset.tab);
           selectTab(tab.dataset.tab);
           return;
         }
 
-        if (target.closest("#run-onboarding")) {
+        const runOnboarding = target.closest("#run-onboarding");
+        if (runOnboarding) {
+          // Skip if already has direct listener
+          if (runOnboarding.dataset.prAttached) return;
           console.log("[promptiply] delegated click: run-onboarding");
           try {
             openOnboardingWizard();
@@ -1742,7 +1747,10 @@
           return;
         }
 
-        if (target.closest("#save-settings")) {
+        const saveSettingsBtn = target.closest("#save-settings");
+        if (saveSettingsBtn) {
+          // Skip if already has direct listener
+          if (saveSettingsBtn.dataset.prAttached) return;
           console.log("[promptiply] delegated click: save-settings");
           try {
             saveSettings();
@@ -1752,7 +1760,10 @@
           return;
         }
 
-        if (target.closest("#save-providers-settings")) {
+        const saveProvidersSettingsBtn = target.closest("#save-providers-settings");
+        if (saveProvidersSettingsBtn) {
+          // Skip if already has direct listener
+          if (saveProvidersSettingsBtn.dataset.prAttached) return;
           console.log("[promptiply] delegated click: save-providers-settings");
           try {
             saveSettings();
@@ -1762,7 +1773,10 @@
           return;
         }
 
-        if (target.closest("#new-profile")) {
+        const newProfile = target.closest("#new-profile");
+        if (newProfile) {
+          // Skip if already has direct listener
+          if (newProfile.dataset.prAttached) return;
           console.log("[promptiply] delegated click: new-profile");
           try {
             openWizard();
@@ -1772,7 +1786,10 @@
           return;
         }
 
-        if (target.closest("#restore-defaults")) {
+        const restoreDefaults = target.closest("#restore-defaults");
+        if (restoreDefaults) {
+          // Skip if already has direct listener
+          if (restoreDefaults.dataset.prAttached) return;
           console.log("[promptiply] delegated click: restore-defaults");
           try {
             showRestoreConfirmation();
@@ -1782,7 +1799,10 @@
           return;
         }
 
-        if (target.closest("#export-profiles")) {
+        const exportProfilesBtn = target.closest("#export-profiles");
+        if (exportProfilesBtn) {
+          // Skip if already has direct listener
+          if (exportProfilesBtn.dataset.prAttached) return;
           console.log("[promptiply] delegated click: export-profiles");
           try {
             exportProfiles();
@@ -1792,7 +1812,10 @@
           return;
         }
 
-        if (target.closest("#import-profiles")) {
+        const importProfilesBtn = target.closest("#import-profiles");
+        if (importProfilesBtn) {
+          // Skip if already has direct listener
+          if (importProfilesBtn.dataset.prAttached) return;
           console.log("[promptiply] delegated click: import-profiles");
           try {
             showImportModal();
