@@ -257,36 +257,110 @@ function matchesHotkey(e, combo) {
   function initInjection(adapter) {
     let floatUi = null;
     let observedInput = null;
-    let ro = null;
-    const update = () => {
-      const inputEl = adapter.findInput();
-      if (!inputEl) {
-        if (floatUi) floatUi.style.display = 'none';
-        try { console.debug('[promptiply] Chat input not found yet; will retry'); } catch(_) {}
-        return;
+    let observedContainer = null;
+    let containerRo = null;
+    let updateScheduled = false;
+    
+    // Determine which positioning function to use based on site
+    const positionFunc = SITE === 'chatgpt' ? positionFloatingUI_ChatGPT : positionFloatingUI_Claude;
+    const containerSelector = SITE === 'chatgpt' ? '.ms-auto.flex.items-center.gap-1\\.5' : '.flex.gap-2\\.5.w-full.items-center';
+    
+    const scheduleUpdate = () => {
+      if (!updateScheduled) {
+        updateScheduled = true;
+        requestAnimationFrame(() => {
+          updateScheduled = false;
+          update();
+        });
       }
-      if (!floatUi) floatUi = createFloatingRefineUI(() => tryRefine(adapter));
-      positionFloatingUI(floatUi, inputEl);
-      floatUi.style.display = 'block';
-      if (observedInput !== inputEl) {
+    };
+    
+    const update = () => {
+      // For Claude, check if button still exists in container
+      if (SITE === 'claude') {
+        const container = document.querySelector('.flex.gap-2\\.5.w-full.items-center');
+        const existingBtn = container?.querySelector('.pr-refine-btn');
+        
+        // If container exists but button doesn't, we need to recreate
+        if (container && !existingBtn) {
+          // Recreate floatUi if button was lost
+          if (!floatUi || !floatUi.querySelector('.pr-refine-btn')) {
+            floatUi = createFloatingRefineUI(() => tryRefine(adapter));
+          }
+        }
+      } else {
+        // For ChatGPT, just create if doesn't exist
+        if (!floatUi) {
+          floatUi = createFloatingRefineUI(() => tryRefine(adapter));
+        }
+      }
+      
+      positionFunc(floatUi);
+      
+      // Add listeners to the input element if not already added
+      const inputEl = adapter.findInput();
+      if (inputEl && inputEl !== observedInput) {
         observedInput = inputEl;
-        if (ro) try { ro.disconnect(); } catch(_) {}
+        
+        // Listen for input events (typing, pasting, deleting, etc.)
+        inputEl.addEventListener('input', scheduleUpdate);
+        inputEl.addEventListener('change', scheduleUpdate);
+        
+        inputEl.addEventListener('paste', () => {
+          // Multiple rapid updates for paste
+          scheduleUpdate();
+          requestAnimationFrame(() => scheduleUpdate());
+          setTimeout(() => scheduleUpdate(), 10);
+          setTimeout(() => scheduleUpdate(), 50);
+          setTimeout(() => scheduleUpdate(), 100);
+        });
+        
+        // Listen for key events with immediate updates
+        inputEl.addEventListener('keyup', () => {
+          scheduleUpdate();
+          requestAnimationFrame(() => scheduleUpdate());
+          setTimeout(() => scheduleUpdate(), 10);
+        });
+        inputEl.addEventListener('keydown', scheduleUpdate);
+        
+        // Listen for focus/blur to update position
+        inputEl.addEventListener('focus', scheduleUpdate);
+        inputEl.addEventListener('blur', scheduleUpdate);
+      }
+      
+      // Also observe the container for resize changes
+      const container = document.querySelector(containerSelector);
+      if (container && container !== observedContainer) {
+        observedContainer = container;
+        if (containerRo) try { containerRo.disconnect(); } catch(_) {}
         try {
-          ro = new ResizeObserver(() => positionFloatingUI(floatUi, inputEl));
-          ro.observe(inputEl);
+          containerRo = new ResizeObserver(() => scheduleUpdate());
+          containerRo.observe(container);
+          // Also observe the parent form
+          const form = container.closest('form');
+          if (form) containerRo.observe(form);
         } catch(_) {}
       }
     };
 
-    // Initial attempt + observe
+    // Initial attempt
     update();
-    const mo = new MutationObserver(() => update());
-    mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
+    
+    // Observe DOM changes to update position
+    const mo = new MutationObserver(() => scheduleUpdate());
+    mo.observe(document.documentElement, { subtree: true, childList: true });
+    
+    // Update on scroll and resize
+    window.addEventListener('scroll', scheduleUpdate, true);
+    window.addEventListener('resize', scheduleUpdate);
+    
     // Also poll briefly during first seconds to catch late mounts
     let tries = 0;
-    const iv = setInterval(() => { tries++; update(); if (tries > 60) clearInterval(iv); }, 250);
+    const iv = setInterval(() => { 
+      tries++; 
+      update(); 
+      if (tries > 60) clearInterval(iv); 
+    }, 250);
   }
 
   async function tryRefine(adapter) {
@@ -455,48 +529,125 @@ prStyle.textContent = `@keyframes pr-spin { from { transform: rotate(0deg); } to
 document.documentElement.appendChild(prStyle);
 
 
-// Floating UI (Shadow DOM) to avoid interfering with site React trees
+// Create floating button that positions next to microphone
 function createFloatingRefineUI(onClick) {
   const host = document.createElement('div');
   host.className = 'pr-float-host';
   host.style.position = 'fixed';
   host.style.zIndex = '2147483646';
-  host.style.top = '0px';
-  host.style.left = '0px';
   host.style.pointerEvents = 'none';
-  host.style.display = 'none';
-  const shadow = host.attachShadow({ mode: 'open' });
-  const style = document.createElement('style');
-  style.textContent = `
-    :host { all: initial; }
-    .wrap { pointer-events: auto; }
-    .btn { background: linear-gradient(135deg, #7c3aed, #06b6d4); color:#fff; border:none; border-radius: 10px; padding:6px 10px; font-size:12px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.3); transition:transform .15s ease, filter .15s ease; }
-    .btn:hover { filter: brightness(1.06); }
-    .btn:active { transform: translateY(1px); }
-  `;
-  const wrap = document.createElement('div');
-  wrap.className = 'wrap';
+  host.style.transition = 'top 0.15s ease, left 0.15s ease'; // Smooth position transitions
+  
   const btn = document.createElement('button');
-  btn.className = 'btn';
+  btn.className = 'pr-refine-btn';
   btn.textContent = 'Refine';
+  btn.style.background = 'linear-gradient(135deg, #7c3aed, #06b6d4)';
+  btn.style.color = '#fff';
+  btn.style.border = 'none';
+  btn.style.borderRadius = '10px';
+  btn.style.padding = '6px 10px';
+  btn.style.fontSize = '12px';
+  btn.style.cursor = 'pointer';
+  btn.style.boxShadow = '0 6px 18px rgba(0,0,0,0.3)';
+  btn.style.transition = 'transform .15s ease, filter .15s ease';
+  btn.style.pointerEvents = 'auto';
+  
+  btn.addEventListener('mouseenter', () => { btn.style.filter = 'brightness(1.06)'; });
+  btn.addEventListener('mouseleave', () => { btn.style.filter = 'brightness(1)'; });
+  btn.addEventListener('mousedown', () => { btn.style.transform = 'translateY(1px)'; });
+  btn.addEventListener('mouseup', () => { btn.style.transform = 'translateY(0)'; });
   btn.addEventListener('click', (e) => { e.stopPropagation(); onClick && onClick(); });
-  wrap.appendChild(btn);
-  shadow.appendChild(style);
-  shadow.appendChild(wrap);
-  document.documentElement.appendChild(host);
+  
+  host.appendChild(btn);
+  document.body.appendChild(host);
   return host;
 }
 
-function positionFloatingUI(host, inputEl) {
-  if (!host || !inputEl) return;
+function positionFloatingUI_ChatGPT(host) {
+  if (!host) return;
   try {
-    const target = document.activeElement && document.activeElement.isSameNode(inputEl) ? document.activeElement : inputEl;
-    const rect = target.getBoundingClientRect();
-    const x = Math.min(window.innerWidth - 64, Math.max(0, rect.right - 64));
-    const y = Math.min(window.innerHeight - 36, Math.max(0, rect.bottom - 36));
-    host.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
-    try { console.debug('[promptiply] Positioning refine button at', { x, y, rect }); } catch(_) {}
-  } catch (_) {}
+    // Find the div with class "ms-auto flex items-center gap-1.5"
+    const container = document.querySelector('.ms-auto.flex.items-center.gap-1\\.5');
+    
+    if (!container) {
+      host.style.display = 'none';
+      return;
+    }
+    
+    // Get container position
+    const containerRect = container.getBoundingClientRect();
+    const btn = host.querySelector('.pr-refine-btn');
+    if (!btn) return;
+    
+    const btnRect = btn.getBoundingClientRect();
+    const btnWidth = btnRect.width || 60;
+    const btnHeight = btnRect.height || 28;
+    
+    // Position at the left edge of container, with gap-1.5 (6px) spacing
+    const gap = 6;
+    const x = containerRect.left - btnWidth - gap;
+    const y = containerRect.top + (containerRect.height / 2) - (btnHeight / 2);
+    
+    host.style.left = Math.round(x) + 'px';
+    host.style.top = Math.round(y) + 'px';
+    host.style.display = 'block';
+    
+    try {
+      console.log('[promptiply] ChatGPT: Positioned floating button', {
+        x, y, btnWidth, btnHeight,
+        containerRect: { left: containerRect.left, top: containerRect.top, width: containerRect.width, height: containerRect.height }
+      });
+    } catch(_) {}
+  } catch (err) {
+    try { console.error('[promptiply] ChatGPT position error:', err); } catch(_) {}
+  }
+}
+
+function positionFloatingUI_Claude(host) {
+  if (!host) return;
+  try {
+    // Find the div with class "flex gap-2.5 w-full items-center"
+    const container = document.querySelector('.flex.gap-2\\.5.w-full.items-center');
+    
+    if (!container) {
+      host.style.display = 'none';
+      return;
+    }
+    
+    // First check if button already exists in container (survived page change)
+    let btn = container.querySelector('.pr-refine-btn');
+    
+    if (btn) {
+      // Button is already in container, we're good
+      host.style.display = 'none';
+      return;
+    }
+    
+    // Button not in container, check if it's in the host
+    btn = host.querySelector('.pr-refine-btn');
+    
+    if (!btn) {
+      // Button doesn't exist at all - this shouldn't happen if update() ran first
+      // but handle it gracefully
+      host.style.display = 'none';
+      return;
+    }
+    
+    // Button exists in host but not in container - insert it
+    // This handles the case when container gets replaced (e.g., after sending message)
+    container.insertBefore(btn, container.firstChild);
+    host.style.display = 'none';
+    
+    try {
+      console.log('[promptiply] Claude: Inserted button into container', {
+        containerClass: container.className,
+        childCount: container.children.length,
+        wasReinserted: true
+      });
+    } catch(_) {}
+  } catch (err) {
+    try { console.error('[promptiply] Claude insert error:', err); } catch(_) {}
+  }
 }
 
 // Deep query that traverses open shadow roots
