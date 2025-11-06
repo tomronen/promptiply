@@ -1451,7 +1451,8 @@
       // Buttons
       const runBtn = document.getElementById("run-onboarding");
       if (runBtn && !runBtn.dataset.prAttached) {
-        runBtn.addEventListener("click", () => {
+        runBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
           try {
             openOnboardingWizard();
           } catch (e) {
@@ -1465,7 +1466,8 @@
 
       const saveBtn = document.getElementById("save-settings");
       if (saveBtn && !saveBtn.dataset.prAttached) {
-        saveBtn.addEventListener("click", () => {
+        saveBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
           try {
             saveSettings();
           } catch (e) {
@@ -1479,7 +1481,8 @@
 
       const saveProvBtn = document.getElementById("save-providers-settings");
       if (saveProvBtn && !saveProvBtn.dataset.prAttached) {
-        saveProvBtn.addEventListener("click", () => {
+        saveProvBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
           try {
             saveSettings();
           } catch (e) {
@@ -1493,7 +1496,8 @@
 
       const newProfileBtn = document.getElementById("new-profile");
       if (newProfileBtn && !newProfileBtn.dataset.prAttached) {
-        newProfileBtn.addEventListener("click", () => {
+        newProfileBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
           try {
             openWizard();
           } catch (e) {
@@ -1659,7 +1663,10 @@
       // Restore Defaults button
       const restoreBtn = document.getElementById("restore-defaults");
       if (restoreBtn && !restoreBtn.dataset.prAttached) {
-        restoreBtn.addEventListener("click", showRestoreConfirmation);
+        restoreBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          showRestoreConfirmation();
+        });
         restoreBtn.dataset.prAttached = "1";
         console.log("[promptiply] attachCoreListeners: bound restore-defaults");
       }
@@ -1667,7 +1674,10 @@
       // Export profiles button
       const exportBtn = document.getElementById("export-profiles");
       if (exportBtn && !exportBtn.dataset.prAttached) {
-        exportBtn.addEventListener("click", exportProfiles);
+        exportBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          exportProfiles();
+        });
         exportBtn.dataset.prAttached = "1";
         console.log("[promptiply] attachCoreListeners: bound export-profiles");
       }
@@ -1675,7 +1685,10 @@
       // Import profiles button
       const importBtn = document.getElementById("import-profiles");
       if (importBtn && !importBtn.dataset.prAttached) {
-        importBtn.addEventListener("click", showImportModal);
+        importBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          showImportModal();
+        });
         importBtn.dataset.prAttached = "1";
         console.log("[promptiply] attachCoreListeners: bound import-profiles");
       }
