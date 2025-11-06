@@ -7,6 +7,77 @@
     return platform.includes('mac') ? 'Ctrl+T' : 'Alt+T';
   }
 
+  // Convert native select to custom dropdown
+  function createCustomDropdown(selectElement) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-dropdown';
+    
+    const button = document.createElement('div');
+    button.className = 'custom-dropdown-button';
+    const buttonText = document.createElement('span');
+    buttonText.textContent = selectElement.options[selectElement.selectedIndex]?.textContent || '';
+    button.appendChild(buttonText);
+    
+    const options = document.createElement('div');
+    options.className = 'custom-dropdown-options';
+    
+    const updateOptions = () => {
+      options.innerHTML = '';
+      Array.from(selectElement.options).forEach((option, index) => {
+        const optionEl = document.createElement('div');
+        optionEl.className = 'custom-dropdown-option';
+        if (option.selected) optionEl.classList.add('selected');
+        optionEl.textContent = option.textContent;
+        optionEl.dataset.value = option.value;
+        optionEl.addEventListener('click', () => {
+          selectElement.value = option.value;
+          buttonText.textContent = option.textContent;
+          options.classList.remove('open');
+          button.classList.remove('open');
+          options.querySelectorAll('.custom-dropdown-option').forEach(opt => opt.classList.remove('selected'));
+          optionEl.classList.add('selected');
+          selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        options.appendChild(optionEl);
+      });
+    };
+    
+    updateOptions();
+    
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = options.classList.toggle('open');
+      button.classList.toggle('open', isOpen);
+    });
+    
+    document.addEventListener('click', (e) => {
+      if (!wrapper.contains(e.target)) {
+        options.classList.remove('open');
+        button.classList.remove('open');
+      }
+    });
+    
+    wrapper.appendChild(button);
+    wrapper.appendChild(options);
+    selectElement.parentNode.replaceChild(wrapper, selectElement);
+    wrapper.appendChild(selectElement);
+    selectElement.style.display = 'none';
+    
+    const updateButton = () => {
+      const selectedOption = selectElement.options[selectElement.selectedIndex];
+      if (selectedOption) {
+        buttonText.textContent = selectedOption.textContent;
+        options.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+          opt.classList.toggle('selected', opt.dataset.value === selectElement.value);
+        });
+      }
+    };
+    
+    selectElement.addEventListener('change', updateButton);
+    
+    return { wrapper, updateButton, updateOptions };
+  }
+
   const $mode = document.getElementById('mode');
   const $profile = document.getElementById('profile');
   const $openOptions = document.getElementById('open-options');
@@ -16,6 +87,8 @@
   const $onboardDismiss = document.getElementById('onboard-dismiss');
   const $hotkeyLabel = document.getElementById('hotkey-label');
   const $refineNow = document.getElementById('refine-now');
+
+  let modeDropdown, profileDropdown;
 
   // Load settings and show hotkey
   chrome.storage.local.get([STORAGE_SETTINGS], (data) => {
@@ -28,8 +101,8 @@
   chrome.storage.local.get(['onboarding_completed','onboardBannerDismissed'], (d) => {
     const onboarded = !!(d && d.onboarding_completed);
     const dismissed = !!(d && d.onboardBannerDismissed);
-  if (onboarded && $runOnboard) $runOnboard.classList.add('hidden');
-  if (!onboarded && !dismissed && $onboardBanner) $onboardBanner.classList.remove('hidden');
+    if (onboarded && $runOnboard) $runOnboard.classList.add('hidden');
+    if (!onboarded && !dismissed && $onboardBanner) $onboardBanner.classList.remove('hidden');
   });
 
   // Load profiles and render
@@ -38,14 +111,32 @@
     renderProfiles(p);
   });
 
+  // Initialize custom dropdowns after DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDropdowns);
+  } else {
+    initDropdowns();
+  }
+
+  function initDropdowns() {
+    if ($mode && !modeDropdown) {
+      modeDropdown = createCustomDropdown($mode);
+    }
+    if ($profile && !profileDropdown) {
+      profileDropdown = createCustomDropdown($profile);
+    }
+  }
+
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && changes[STORAGE_PROFILES]) {
       renderProfiles(changes[STORAGE_PROFILES].newValue || { list: [], activeProfileId: null });
+      if (profileDropdown) profileDropdown.updateButton();
     }
     if (area === 'local' && changes[STORAGE_SETTINGS]) {
       const s = changes[STORAGE_SETTINGS].newValue || { mode: 'webui' };
       if ($mode) $mode.value = s.mode || 'webui';
       if ($hotkeyLabel) $hotkeyLabel.textContent = s.refineHotkey || getDefaultHotkey();
+      if (modeDropdown) modeDropdown.updateButton();
     }
   });
 
@@ -88,7 +179,7 @@
       try { window.open(url); } catch (_) {}
     }
     // Hide banner and persist dismissal
-  if ($onboardBanner) $onboardBanner.classList.add('hidden');
+    if ($onboardBanner) $onboardBanner.classList.add('hidden');
     chrome.storage.local.set({ onboardBannerDismissed: true });
     try { window.close(); } catch(_) {}
   }
@@ -98,7 +189,7 @@
 
   // Dismiss button persists dismissal so banner won't reappear
   $onboardDismiss?.addEventListener('click', () => {
-  try { if ($onboardBanner) $onboardBanner.classList.add('hidden'); } catch(_) {}
+    try { if ($onboardBanner) $onboardBanner.classList.add('hidden'); } catch(_) {}
     chrome.storage.local.set({ onboardBannerDismissed: true });
   });
 
@@ -123,8 +214,11 @@
       $profile.appendChild(o);
     });
     if (p.activeProfileId) $profile.value = p.activeProfileId;
+    
+    // Recreate dropdown if it exists
+    if (profileDropdown) {
+      profileDropdown.updateOptions();
+      profileDropdown.updateButton();
+    }
   }
-
 })();
-
-

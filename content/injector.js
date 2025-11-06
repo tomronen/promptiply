@@ -525,7 +525,90 @@ function matchesHotkey(e, combo) {
 })();
 // Animations
 const prStyle = document.createElement('style');
-prStyle.textContent = `@keyframes pr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+prStyle.textContent = `
+  @keyframes pr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  
+  @keyframes pr-gentle-pulse {
+    0%, 100% { 
+      filter: brightness(1);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+    }
+    50% { 
+      filter: brightness(1.03);
+      box-shadow: 0 6px 20px rgba(124,58,237,0.2);
+    }
+  }
+  
+  @keyframes pr-click-bounce {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.92); }
+    100% { transform: scale(1); }
+  }
+  
+  .pr-refine-btn.clicked {
+    animation: pr-click-bounce 0.3s ease !important;
+    transform-origin: center center;
+  }
+  
+  .pr-refine-btn {
+    position: relative;
+    overflow: visible;
+    animation: pr-gentle-pulse 3s ease-in-out infinite;
+    transform-origin: center center;
+  }
+  
+  .pr-refine-btn:hover {
+    animation: none;
+  }
+  
+  .pr-refine-btn:hover.clicked {
+    animation: pr-click-bounce 0.3s ease !important;
+  }
+  
+  .pr-refine-btn::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    border-radius: 12px;
+    border: 2px solid rgba(124, 58, 237, 0.4);
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    transform: scale(0.95);
+    pointer-events: none;
+    z-index: -1;
+  }
+  
+  .pr-refine-btn:hover::before {
+    opacity: 1;
+    transform: scale(1);
+  }
+  
+  .pr-refine-btn::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.5) 0%, rgba(124, 58, 237, 0.15) 40%, transparent 60%);
+    transform: translate(-50%, -50%) scale(0);
+    transition: width 0.4s ease, height 0.4s ease, transform 0.4s ease, opacity 0.4s ease;
+    opacity: 0;
+    pointer-events: none;
+    z-index: -2;
+  }
+  
+  .pr-refine-btn:hover::after {
+    width: 80px;
+    height: 80px;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.9;
+  }
+`;
 document.documentElement.appendChild(prStyle);
 
 
@@ -541,6 +624,7 @@ function createFloatingRefineUI(onClick) {
   const btn = document.createElement('button');
   btn.className = 'pr-refine-btn';
   btn.textContent = 'Refine';
+  btn.style.position = 'relative';
   btn.style.background = 'linear-gradient(135deg, #7c3aed, #06b6d4)';
   btn.style.color = '#fff';
   btn.style.border = 'none';
@@ -549,14 +633,49 @@ function createFloatingRefineUI(onClick) {
   btn.style.fontSize = '12px';
   btn.style.cursor = 'pointer';
   btn.style.boxShadow = '0 6px 18px rgba(0,0,0,0.3)';
-  btn.style.transition = 'transform .15s ease, filter .15s ease';
+  btn.style.transition = 'transform .2s ease, filter .2s ease, box-shadow .2s ease';
   btn.style.pointerEvents = 'auto';
+  btn.style.overflow = 'visible';
+  btn.style.zIndex = '1';
+  btn.style.transformOrigin = 'center center';
   
-  btn.addEventListener('mouseenter', () => { btn.style.filter = 'brightness(1.06)'; });
-  btn.addEventListener('mouseleave', () => { btn.style.filter = 'brightness(1)'; });
-  btn.addEventListener('mousedown', () => { btn.style.transform = 'translateY(1px)'; });
-  btn.addEventListener('mouseup', () => { btn.style.transform = 'translateY(0)'; });
-  btn.addEventListener('click', (e) => { e.stopPropagation(); onClick && onClick(); });
+  btn.addEventListener('mouseenter', () => { 
+    btn.style.filter = 'brightness(1.1)';
+    btn.style.boxShadow = '0 4px 12px rgba(124,58,237,0.5)';
+  });
+  btn.addEventListener('mouseleave', () => { 
+    btn.style.filter = 'brightness(1)';
+    btn.style.boxShadow = '0 6px 18px rgba(0,0,0,0.3)';
+  });
+  btn.addEventListener('mousedown', () => { 
+    // Don't set transform here - let the click animation handle it
+  });
+  
+  const triggerClickAnimation = () => {
+    // Remove any existing transform and class
+    btn.style.transform = '';
+    btn.classList.remove('clicked');
+    // Force reflow to ensure DOM updates
+    void btn.offsetWidth;
+    // Use requestAnimationFrame to ensure animation starts
+    requestAnimationFrame(() => {
+      btn.classList.add('clicked');
+      // Remove class after animation completes
+      setTimeout(() => {
+        btn.classList.remove('clicked');
+      }, 300);
+    });
+  };
+  
+  btn.addEventListener('mouseup', () => {
+    // Don't interfere with transform here
+  });
+  
+  btn.addEventListener('click', (e) => { 
+    e.stopPropagation();
+    triggerClickAnimation();
+    onClick && onClick(); 
+  });
   
   host.appendChild(btn);
   document.body.appendChild(host);

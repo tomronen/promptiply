@@ -64,6 +64,48 @@
     return platform.includes("mac") ? "Ctrl+T" : "Alt+T";
   }
 
+  // Tabs behavior
+  let currentTab = 'general';
+  const tabOrder = ['general', 'providers', 'profiles'];
+  
+  function selectTab(name){
+    if (name === currentTab) return;
+    
+    const currentIndex = tabOrder.indexOf(currentTab);
+    const newIndex = tabOrder.indexOf(name);
+    const direction = newIndex > currentIndex ? 'right' : 'left';
+    
+    // Get current and new panels
+    const currentPanel = document.getElementById(`tab-${currentTab}`);
+    const newPanel = document.getElementById(`tab-${name}`);
+    
+    if (currentPanel && newPanel) {
+      // Slide out current panel
+      currentPanel.classList.remove('slide-in-from-left', 'slide-in-from-right');
+      currentPanel.classList.add(direction === 'right' ? 'slide-out-to-left' : 'slide-out-to-right');
+      
+      // After slide-out completes, hide current and show new
+      setTimeout(() => {
+        currentPanel.classList.add('tab-panel-hidden');
+        currentPanel.classList.remove('slide-out-to-left', 'slide-out-to-right');
+        
+        // Show new panel with slide-in animation
+        newPanel.classList.remove('tab-panel-hidden');
+        newPanel.classList.add(direction === 'right' ? 'slide-in-from-right' : 'slide-in-from-left');
+        
+        // Clean up animation classes after slide-in completes
+        setTimeout(() => {
+          newPanel.classList.remove('slide-in-from-left', 'slide-in-from-right');
+        }, 150);
+      }, 150);
+    }
+    
+    // Update tab buttons
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    currentTab = name;
+  }
+
   function capitalize(s) {
     return (s || "").charAt(0).toUpperCase() + (s || "").slice(1);
   }
@@ -196,24 +238,11 @@
     } catch (_) {}
   }
 
-  // Tab switching
-  function selectTab(name) {
-    console.log("[promptiply] selectTab ->", name);
-    const tabs = document.querySelectorAll(".tab");
-    tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
-    
-    const panels = {
-      general: document.getElementById("tab-general"),
-      providers: document.getElementById("tab-providers"),
-      profiles: document.getElementById("tab-profiles"),
-    };
-    
-    Object.entries(panels).forEach(([k, el]) => {
-      if (el) {
-        el.classList.toggle("tab-panel-hidden", k !== name);
-      }
-    });
-  }
+  // Initialize tab listeners
+  document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(t => t.addEventListener('click', () => selectTab(t.dataset.tab)));
+  });
 
   // Settings functions
   function updateProviderDisabled() {
