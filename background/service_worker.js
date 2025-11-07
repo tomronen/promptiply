@@ -4,6 +4,390 @@ let activeRefinementTabId = null;
 let mlcEngineHandler = null;
 let ExtensionServiceWorkerMLCEngineHandler = null;
 
+const EVOLUTION_TOPIC_LIMIT = 10;
+const DEFAULT_PROFILE_STATE = Object.freeze({ list: [], activeProfileId: null });
+const STOP_WORDS = new Set([
+  'the','and','for','that','with','this','from','your','about','please','could','would','should',
+  'when','where','what','why','how','have','need','like','into','some','more','than','then','them',
+  'they','their','there','here','been','also','just','make','made','will','step','steps','help',
+  'question','questions','issue','issues','problem','problems','project','projects','using','user',
+  'users','want','wants','goal','goals','request','asks','asking','provide','giving','give','take'
+]);
+
+function createEmptyEvolution() {
+  return {
+    topics: [],
+    lastUpdated: null,
+    usageCount: 0,
+    lastPrompt: '',
+  };
+}
+
+function normalizeEvolution(evolution) {
+  if (!evolution || typeof evolution !== 'object') {
+    return createEmptyEvolution();
+  }
+
+  const rawTopics = Array.isArray(evolution.topics) ? evolution.topics : [];
+  const now = new Date().toISOString();
+  
+  // Migrate from old string format to new object format
+  const topics = rawTopics.map((topic) => {
+    // If it's already an object, normalize it
+    if (topic && typeof topic === 'object') {
+      return {
+        name: String(topic.name || topic).trim(),
+        count: typeof topic.count === 'number' && Number.isFinite(topic.count) && topic.count > 0 ? topic.count : 1,
+        lastUsed: typeof topic.lastUsed === 'string' ? topic.lastUsed : (topic.lastUsed || now),
+      };
+    }
+    // If it's a string (old format), convert to object
+    const name = String(topic || '').trim();
+    if (!name) return null;
+    return {
+      name,
+      count: 1,
+      lastUsed: now,
+    };
+  }).filter(Boolean).slice(0, EVOLUTION_TOPIC_LIMIT);
+
+  return {
+    topics,
+    lastUpdated: typeof evolution.lastUpdated === 'string' ? evolution.lastUpdated : null,
+    usageCount:
+      typeof evolution.usageCount === 'number' && Number.isFinite(evolution.usageCount)
+        ? evolution.usageCount
+        : 0,
+    lastPrompt: typeof evolution.lastPrompt === 'string' ? evolution.lastPrompt : '',
+  };
+}
+
+function normalizeProfile(profile) {
+  if (!profile || typeof profile !== 'object') return null;
+  return {
+    ...profile,
+    evolving_profile: normalizeEvolution(profile.evolving_profile),
+  };
+}
+
+function normalizeProfilesState(raw) {
+  const state = raw && typeof raw === 'object' ? { ...DEFAULT_PROFILE_STATE, ...raw } : { ...DEFAULT_PROFILE_STATE };
+  state.list = Array.isArray(state.list)
+    ? state.list
+        .map(normalizeProfile)
+        .filter(Boolean)
+    : [];
+  return state;
+}
+
+function deriveTopicsFromContext(prompt, refined) {
+  const text = `${prompt || ''}\n${refined || ''}`;
+  const lower = text.toLowerCase();
+
+  const wordPattern = /[a-z0-9+#/\.]{2,}/gi;
+  const words = lower.match(wordPattern) || [];
+
+  const filteredWords = words.filter((token) => {
+    if (!token) return false;
+    if (STOP_WORDS.has(token)) return false;
+    if (/^[0-9]+$/.test(token)) return false;
+    return token.length >= 3 || /[+#]/.test(token);
+  });
+
+  const tokenCounts = new Map();
+  const bigramCounts = new Map();
+
+  filteredWords.forEach((token) => {
+    tokenCounts.set(token, (tokenCounts.get(token) || 0) + 1);
+  });
+
+  for (let i = 0; i < filteredWords.length - 1; i += 1) {
+    const first = filteredWords[i];
+    const second = filteredWords[i + 1];
+    if (!first || !second) continue;
+    const phrase = `${first} ${second}`;
+    bigramCounts.set(phrase, (bigramCounts.get(phrase) || 0) + 1);
+  }
+
+  const candidates = [];
+
+  Array.from(bigramCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, EVOLUTION_TOPIC_LIMIT * 2)
+    .forEach(([phrase, score]) => {
+      candidates.push({ topic: normalizeTokenToTopic(phrase), score: score * 2 });
+    });
+
+  Array.from(tokenCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([token, score]) => {
+      candidates.push({ topic: normalizeTokenToTopic(token), score });
+    });
+
+  const seen = new Set();
+  const results = [];
+  for (const candidate of candidates) {
+    if (!candidate.topic) continue;
+    const key = candidate.topic.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(candidate.topic);
+    if (results.length >= EVOLUTION_TOPIC_LIMIT) break;
+  }
+
+  return results;
+}
+
+function normalizeTokenToTopic(token) {
+  if (!token) return '';
+  if (token.includes(' ')) {
+    const pieces = token
+      .split(' ')
+      .map((part) => normalizeTokenToTopic(part))
+      .filter(Boolean);
+    return pieces.join(' ').trim();
+  }
+
+  if (/^[a-z]+$/.test(token)) {
+    return token.charAt(0).toUpperCase() + token.slice(1);
+  }
+
+  if (/^[a-z0-9]+$/i.test(token)) {
+    return token.toUpperCase();
+  }
+
+  return token.toUpperCase();
+}
+
+function extractJsonSegment(rawText) {
+  if (!rawText) return null;
+  const trimmed = rawText.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) {
+    return fenceMatch[1];
+  }
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return trimmed;
+  }
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+  return null;
+}
+
+function normalizeRefinementResult(rawText, originalPrompt) {
+  const raw = rawText ?? '';
+  const result = {
+    refinedPrompt: raw.trim(),
+    topics: [],
+    rawText: raw,
+  };
+
+  const jsonSegment = extractJsonSegment(raw);
+  if (jsonSegment) {
+    try {
+      const parsed = JSON.parse(jsonSegment);
+      const refinedCandidate = parsed.refinedPrompt || parsed.refined_prompt || parsed.refined || parsed.prompt;
+      const topicsCandidate = Array.isArray(parsed.topics)
+        ? parsed.topics
+        : Array.isArray(parsed.Tags)
+        ? parsed.Tags
+        : [];
+
+      if (typeof refinedCandidate === 'string' && refinedCandidate.trim()) {
+        result.refinedPrompt = refinedCandidate.trim();
+      }
+
+      if (Array.isArray(topicsCandidate)) {
+        result.topics = topicsCandidate
+          .map((t) => (typeof t === 'string' ? t.trim() : ''))
+          .filter(Boolean)
+          .slice(0, EVOLUTION_TOPIC_LIMIT);
+      }
+    } catch (error) {
+      console.warn('[promptiply:bg] Failed to parse refinement JSON', error);
+    }
+  }
+
+  if (!result.topics.length) {
+    result.topics = deriveTopicsFromContext(originalPrompt, result.refinedPrompt);
+  }
+
+  return result;
+}
+
+function truncatePrompt(prompt, maxLen) {
+  if (!prompt) return '';
+  if (prompt.length <= maxLen) return prompt;
+  return `${prompt.slice(0, maxLen - 1)}…`;
+}
+
+function calculateTopicScore(topic, now, maxCount) {
+  if (!topic || !topic.name) return 0;
+  
+  // Frequency component: normalized count (0-1)
+  const frequencyWeight = 0.4;
+  const frequencyScore = maxCount > 0 ? topic.count / maxCount : 0;
+  
+  // Recency component: decay function based on days since last used
+  const recencyWeight = 0.6;
+  let recencyScore = 0;
+  if (topic.lastUsed) {
+    const lastUsedDate = new Date(topic.lastUsed);
+    const nowDate = new Date(now);
+    const daysSinceLastUsed = (nowDate - lastUsedDate) / (1000 * 60 * 60 * 24);
+    // Decay function: 1 / (1 + days) - more recent = higher score
+    recencyScore = 1 / (1 + daysSinceLastUsed);
+  } else {
+    // If no lastUsed, treat as very old
+    recencyScore = 0;
+  }
+  
+  // Combined score
+  const score = (frequencyScore * frequencyWeight) + (recencyScore * recencyWeight);
+  return score;
+}
+
+function evolveProfile(profile, { prompt, refined, topics }) {
+  const normalized = normalizeProfile(profile);
+  if (!normalized) return { changed: false, profile };
+
+  // Extract topic names from provided topics (can be strings or objects)
+  const providedTopicNames = Array.isArray(topics)
+    ? topics
+        .map((topic) => {
+          if (typeof topic === 'string') return topic.trim();
+          if (topic && typeof topic === 'object' && topic.name) return String(topic.name).trim();
+          return '';
+        })
+        .filter(Boolean)
+    : [];
+
+  // Get resolved topic names (from LLM or fallback to context extraction)
+  const resolvedTopicNames = providedTopicNames.length 
+    ? providedTopicNames 
+    : deriveTopicsFromContext(prompt, refined);
+
+  const now = new Date().toISOString();
+  const existingTopics = Array.isArray(normalized.evolving_profile.topics)
+    ? normalized.evolving_profile.topics.slice()
+    : [];
+
+  // Helper function to normalize topic name for comparison (case-insensitive)
+  const normalizeTopicName = (name) => String(name || '').trim().toLowerCase();
+
+  // Update existing topics or add new ones
+  const topicMap = new Map();
+  
+  // First, add all existing topics to the map
+  existingTopics.forEach((topic) => {
+    const key = normalizeTopicName(topic.name);
+    topicMap.set(key, { ...topic });
+  });
+
+  // Process resolved topics
+  resolvedTopicNames.forEach((topicName) => {
+    const key = normalizeTopicName(topicName);
+    if (topicMap.has(key)) {
+      // Existing topic: increment count and update lastUsed
+      const existing = topicMap.get(key);
+      topicMap.set(key, {
+        ...existing,
+        count: (existing.count || 1) + 1,
+        lastUsed: now,
+      });
+    } else {
+      // New topic: add with count 1
+      topicMap.set(key, {
+        name: String(topicName).trim(),
+        count: 1,
+        lastUsed: now,
+      });
+    }
+  });
+
+  // Convert map to array and calculate max count for scoring
+  const allTopics = Array.from(topicMap.values());
+  const maxCount = Math.max(...allTopics.map((t) => t.count || 1), 1);
+
+  // Calculate scores and sort by score (descending), then by lastUsed (descending) as tiebreaker
+  const scoredTopics = allTopics.map((topic) => ({
+    ...topic,
+    score: calculateTopicScore(topic, now, maxCount),
+  }));
+
+  scoredTopics.sort((a, b) => {
+    if (Math.abs(a.score - b.score) > 0.0001) {
+      return b.score - a.score; // Higher score first
+    }
+    // Tiebreaker: more recent lastUsed first
+    const aTime = a.lastUsed ? new Date(a.lastUsed).getTime() : 0;
+    const bTime = b.lastUsed ? new Date(b.lastUsed).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  // Keep top N topics and remove score field
+  const finalTopics = scoredTopics
+    .slice(0, EVOLUTION_TOPIC_LIMIT)
+    .map(({ score, ...topic }) => topic);
+
+  // Check if topics changed
+  const changed =
+    finalTopics.length !== existingTopics.length ||
+    finalTopics.some((topic, idx) => {
+      const existing = existingTopics[idx];
+      if (!existing) return true;
+      return (
+        normalizeTopicName(topic.name) !== normalizeTopicName(existing.name) ||
+        topic.count !== existing.count ||
+        topic.lastUsed !== existing.lastUsed
+      );
+    });
+
+  const updated = {
+    ...normalized,
+    evolving_profile: {
+      ...normalized.evolving_profile,
+      topics: finalTopics,
+      usageCount: (normalized.evolving_profile.usageCount || 0) + 1,
+      lastUpdated: now,
+      lastPrompt: truncatePrompt(prompt, 200),
+    },
+  };
+
+  return { changed: true, profile: updated };
+}
+
+async function applyProfileEvolution({ profilesState, activeProfileIndex, prompt, refined, topics }) {
+  if (!profilesState || typeof activeProfileIndex !== 'number' || activeProfileIndex < 0) return;
+
+  const currentProfile = profilesState.list[activeProfileIndex];
+  if (!currentProfile) return;
+
+  const { changed, profile } = evolveProfile(currentProfile, { prompt, refined, topics });
+  if (!changed) return;
+
+  profilesState.list = profilesState.list.slice();
+  profilesState.list[activeProfileIndex] = profile;
+
+  try {
+    await new Promise((resolve, reject) => {
+      chrome.storage.sync.set({ profiles: profilesState }, () => {
+        const err = chrome.runtime?.lastError;
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  } catch (error) {
+    console.warn('[promptiply:bg] Failed to persist evolved profile', error);
+  }
+}
+
 // Load web-llm handler dynamically
 async function loadMLCHandler() {
   if (ExtensionServiceWorkerMLCEngineHandler) {
@@ -42,10 +426,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       console.log('[promptiply:bg] Sending response back to content script:', {
         ok: true,
         status: 'ok',
-        refinedLength: res?.length || 0,
-        refinedPreview: res?.slice(0, 100)
+        refinedLength: res?.refinedPrompt?.length || 0,
+        refinedPreview: res?.refinedPrompt?.slice(0, 100)
       });
-      sendResponse({ ok: true, status: 'ok', refined: res });
+      sendResponse({
+        ok: true,
+        status: 'ok',
+        refined: res?.refinedPrompt || '',
+        topics: Array.isArray(res?.topics) ? res.topics : [],
+        raw: res?.rawText,
+      });
     }).catch((err) => {
       activeRefinementTabId = null;
       console.error('[promptiply:bg] Refinement error:', err);
@@ -96,6 +486,7 @@ try {
                 persona: 'General assistant',
                 instructions: 'Be concise, ask clarifying questions when needed.',
                 temperature: 0.2,
+                evolving_profile: createEmptyEvolution(),
               };
               const payload = { list: [defaultProfile], activeProfileId: 'default' };
               chrome.storage.sync.set({ profiles: payload }, () => {
@@ -146,21 +537,39 @@ async function handleRefinement(payload, sender) {
   console.log('[promptiply:bg] Mode/provider/model', { mode, provider, model: settings[provider === 'openai' ? 'openaiModel' : 'anthropicModel'] });
 
   // Load active profile
-  const profiles = await new Promise((resolve) => {
+  const profilesState = await new Promise((resolve) => {
     chrome.storage.sync.get(['profiles'], (data) => {
-      resolve(data.profiles || { list: [], activeProfileId: null });
+      resolve(normalizeProfilesState(data.profiles));
     });
   });
 
-  const activeProfile = profiles.list.find(p => p.id === profiles.activeProfileId) || null;
+  const activeProfileIndex = profilesState.list.findIndex((p) => p.id === profilesState.activeProfileId);
+  const activeProfile = activeProfileIndex >= 0 ? profilesState.list[activeProfileIndex] : null;
+
   const system = buildSystemPrompt(activeProfile);
   const user = buildUserPrompt(prompt, activeProfile);
 
   if (mode === 'api') {
     if (provider === 'openai') {
-      return await refineWithOpenAI({ system, user, settings });
+      const result = await refineWithOpenAI({ system, user, settings, originalPrompt: prompt });
+      await applyProfileEvolution({
+        profilesState,
+        activeProfileIndex,
+        prompt,
+        refined: result.refinedPrompt,
+        topics: result.topics,
+      });
+      return result;
     } else if (provider === 'anthropic') {
-      return await refineWithAnthropic({ system, user, settings });
+      const result = await refineWithAnthropic({ system, user, settings, originalPrompt: prompt });
+      await applyProfileEvolution({
+        profilesState,
+        activeProfileIndex,
+        prompt,
+        refined: result.refinedPrompt,
+        topics: result.topics,
+      });
+      return result;
     } else {
       throw new Error(`Unknown provider: ${provider}`);
     }
@@ -169,15 +578,31 @@ async function handleRefinement(payload, sender) {
     if (!site) {
       throw new Error('Could not determine site for WebUI mode');
     }
-    return await refineViaWebUI({ site, system, user });
+    const result = await refineViaWebUI({ site, system, user, originalPrompt: prompt });
+    await applyProfileEvolution({
+      profilesState,
+      activeProfileIndex,
+      prompt,
+      refined: result.refinedPrompt,
+      topics: result.topics,
+    });
+    return result;
   } else if (mode === 'local') {
-    return await refineWithLocal({ system, user });
+    const result = await refineWithLocal({ system, user, originalPrompt: prompt });
+    await applyProfileEvolution({
+      profilesState,
+      activeProfileIndex,
+      prompt,
+      refined: result.refinedPrompt,
+      topics: result.topics,
+    });
+    return result;
   } else {
     throw new Error(`Unknown mode: ${mode}`);
   }
 }
 
-async function refineWithOpenAI({ system, user, settings }) {
+async function refineWithOpenAI({ system, user, settings, originalPrompt }) {
   const apiKey = settings.openaiKey;
   const model = settings.openaiModel || 'gpt-5-nano';
 
@@ -187,12 +612,9 @@ async function refineWithOpenAI({ system, user, settings }) {
 
   console.log('[promptiply:bg] OpenAI request', { model, sysLen: system.length, userLen: user.length, hasSystem: !!system, systemPreview: system?.slice(0, 100) });
 
-  // Wrap user prompt with refinement instruction
-  const userWithInstruction = `Refine this prompt. Output only refined prompt.\n---\n${user}`;
-
   const messages = [];
   if (system) messages.push({ role: 'system', content: system });
-  messages.push({ role: 'user', content: userWithInstruction });
+  messages.push({ role: 'user', content: user });
 
   const requestBody = {
     model,
@@ -245,25 +667,16 @@ async function refineWithOpenAI({ system, user, settings }) {
         const retryData = await retryRes.json();
         const text = retryData.choices?.[0]?.message?.content || '';
         console.log('[promptiply:bg] OpenAI response (plain mode)', { length: text.length });
-        return text.trim();
+        return normalizeRefinementResult(text, originalPrompt);
       } else {
         throw new Error(`OpenAI API error: ${res.status} ${errBody}`);
       }
     }
 
     const data = await res.json();
-    let text = data.choices?.[0]?.message?.content || '';
-
-    // Try to parse JSON if it's JSON mode
-    try {
-      const parsed = JSON.parse(text);
-      text = parsed.refined || parsed.text || text;
-    } catch (_) {
-      // Not JSON, use as-is
-    }
-
+    const text = data.choices?.[0]?.message?.content || '';
     console.log('[promptiply:bg] OpenAI response (json mode)', { length: text.length });
-    return text.trim();
+    return normalizeRefinementResult(text, originalPrompt);
   } catch (e) {
     if (e.message && e.message.includes('OpenAI API error')) {
       throw e;
@@ -273,7 +686,7 @@ async function refineWithOpenAI({ system, user, settings }) {
   }
 }
 
-async function refineWithAnthropic({ system, user, settings }) {
+async function refineWithAnthropic({ system, user, settings, originalPrompt }) {
   const apiKey = settings.anthropicKey;
   const model = settings.anthropicModel || 'claude-haiku-4-5';
 
@@ -283,15 +696,12 @@ async function refineWithAnthropic({ system, user, settings }) {
 
   console.log('[promptiply:bg] Anthropic request', { model, sysLen: system.length, userLen: user.length, hasSystem: !!system, systemPreview: system?.slice(0, 100) });
 
-  // Wrap user prompt with refinement instruction
-  const userWithInstruction = `Refine this prompt. Output only refined prompt.\n---\n${user}`;
-
   // Anthropic Messages API structure
   // https://docs.anthropic.com/en/api/messages
   const messages = [
     {
       role: 'user',
-      content: userWithInstruction
+      content: user
     }
   ];
 
@@ -338,7 +748,7 @@ async function refineWithAnthropic({ system, user, settings }) {
     }
 
     const data = await res.json();
-    
+
     // Anthropic response structure:
     // {
     //   "content": [
@@ -371,7 +781,7 @@ async function refineWithAnthropic({ system, user, settings }) {
       throw new Error('Empty response from Anthropic API');
     }
     
-    return text.trim();
+    return normalizeRefinementResult(text, originalPrompt);
   } catch (e) {
     if (e.message && e.message.includes('Anthropic API error')) {
       throw e;
@@ -381,9 +791,9 @@ async function refineWithAnthropic({ system, user, settings }) {
   }
 }
 
-async function refineViaWebUI({ site, system, user }) {
+async function refineViaWebUI({ site, system, user, originalPrompt }) {
   const url = site === 'claude' ? 'https://claude.ai/' : 'https://chat.openai.com/';
-  const composed = `${system}\n\nRefine this prompt. Output only refined prompt.\n---\n${user}`;
+  const composed = `${system}\n\n${user}`;
   let previousActiveTabId = null;
 
   try {
@@ -475,10 +885,10 @@ async function refineViaWebUI({ site, system, user }) {
     // If we got an empty result, return the original prompt as fallback
     if (!finalResult || finalResult.trim().length === 0) {
       console.warn('[promptiply:bg] WebUI automation returned empty result, using original prompt as fallback');
-      return user; // Return the original user prompt
+      return normalizeRefinementResult(originalPrompt, originalPrompt);
     }
 
-    return finalResult;
+    return normalizeRefinementResult(finalResult, originalPrompt);
   } catch (e) {
     console.error('[promptiply:bg] WebUI outer error:', e);
     // Ensure tab is closed even on outer error
@@ -491,7 +901,7 @@ async function refineViaWebUI({ site, system, user }) {
         await chrome.tabs.update(previousActiveTabId, { active: true });
       } catch (_) {}
     }
-    return '';
+    return normalizeRefinementResult(originalPrompt, originalPrompt);
   }
 }
 
@@ -1149,13 +1559,51 @@ CRITICAL INSTRUCTIONS:
     parts.push(`Style guidelines: ${profile.styleGuidelines.join('; ')}`);
   }
 
+  if (profile.evolving_profile) {
+    const evo = normalizeEvolution(profile.evolving_profile);
+    if (evo.topics.length > 0) {
+      // Extract topic names from objects
+      const topicNames = evo.topics.map((topic) => 
+        typeof topic === 'string' ? topic : (topic.name || '')
+      ).filter(Boolean);
+      if (topicNames.length > 0) {
+        parts.push(`Focus especially on recent topics: ${topicNames.join(', ')}`);
+      }
+    }
+  }
+
+  parts.push('\nRespond strictly with JSON containing fields refinedPrompt (string) and topics (array of strings).');
+  parts.push('\nThe topics array must contain 1-6 single words or hyphenated single concepts (e.g., "React", "Jenkins", "Github-Actions", "Python", "Docker"), not multi-word phrases (e.g., "web development", "CI pipelines", "cloud computing").');
   parts.push('\nRefine the user\'s prompt so that when used, it will generate responses that match the profile above. Preserve the original intent while improving clarity, structure, and effectiveness.');
 
   return parts.join('\n');
 }
 
 function buildUserPrompt(prompt, profile) {
-  return prompt;
+  const instructions = [
+    'Return a JSON object with two fields: refinedPrompt (string) and topics (array of short strings).',
+    'The refinedPrompt must preserve the user\'s intent while improving clarity.',
+    'The topics array must contain 1-6 single words or hyphenated single concepts (e.g., "React", "Jenkins", "Github-Actions", "Python", "Docker"), not multi-word phrases (e.g., "web development", "CI pipelines", "cloud computing").',
+    'Avoid explanations or additional keys; respond with valid JSON only.',
+  ];
+
+  const profileHints = [];
+  if (profile?.name) profileHints.push(`Profile name: ${profile.name}`);
+  if (profile?.persona) profileHints.push(`Persona: ${profile.persona}`);
+  if (profile?.tone) profileHints.push(`Tone: ${profile.tone}`);
+  if (profile?.styleGuidelines?.length) {
+    profileHints.push(`Style guidelines: ${profile.styleGuidelines.join('; ')}`);
+  }
+
+  const context = [
+    'You are refining prompts. Follow these instructions strictly.',
+    ...profileHints,
+    ...instructions,
+    'User prompt:',
+    prompt,
+  ].join('\n');
+
+  return context;
 }
 
 // Local mode using web-llm
@@ -1189,7 +1637,7 @@ async function ensureOffscreenDocument() {
   }
 }
 
-async function refineWithLocal({ system, user }) {
+async function refineWithLocal({ system, user, originalPrompt }) {
   try {
     // Ensure offscreen document exists
     await ensureOffscreenDocument();
@@ -1235,7 +1683,7 @@ async function refineWithLocal({ system, user }) {
     });
 
     console.log('[promptiply:bg] Received refined prompt from local mode, length:', response.length);
-    return response;
+    return normalizeRefinementResult(response, originalPrompt);
   } catch (error) {
     console.error('[promptiply:bg] Local refinement error:', error);
     throw error;

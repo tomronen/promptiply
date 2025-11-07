@@ -101,6 +101,30 @@
         <button id="new-profile" class="primary">New Profile</button>
       </div>
       <div id="profiles-list" class="list"></div>
+      <div id="evolving-editor" class="card card-vertical tab-panel-hidden">
+        <div class="evolving-header">
+          <div>
+            <div class="evolving-title">Active Profile Evolution</div>
+            <div class="muted" id="evolving-active-name"></div>
+          </div>
+          <div class="muted muted-small" id="evolving-last-updated"></div>
+        </div>
+        <div class="field">
+          <label>Focus topics (comma separated)</label>
+          <input id="evolving-topics" type="text" placeholder="e.g., C/C++, Police Investigations" />
+          <div class="hint">Maximum of 10 topics allowed.</div>
+        </div>
+        <div class="field">
+          <label>Last prompt signal (read-only)</label>
+          <textarea id="evolving-lastprompt" class="textarea-fixed" readonly></textarea>
+          <div class="hint">Captured automatically from the most recent refinement.</div>
+        </div>
+        <div class="actions actions-space-between actions-top-margin">
+          <button id="evolving-reset" type="button">Reset fields</button>
+          <button id="evolving-apply" type="button" class="primary">Apply Evolution</button>
+        </div>
+        <div class="muted muted-small" id="evolving-status"></div>
+      </div>
     </div>
 
     <p class="muted muted-top-margin">Your API keys are stored locally on this device. Profiles sync across Chrome if enabled.</p>

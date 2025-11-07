@@ -9,6 +9,138 @@
   const STORAGE_PREDEFINED = "predefined_profiles";
   const SCHEMA_VERSION = 1;
 
+  const EVOLUTION_TOPIC_LIMIT = 10;
+
+  const DEFAULT_PROFILE_STATE = Object.freeze({
+    list: [],
+    activeProfileId: null,
+  });
+
+  function createEmptyEvolution() {
+    return {
+      topics: [],
+      lastUpdated: null,
+      usageCount: 0,
+      lastPrompt: "",
+    };
+  }
+
+  function normalizeEvolution(evolution) {
+    if (!evolution || typeof evolution !== "object") {
+      return createEmptyEvolution();
+    }
+
+    const rawTopics = Array.isArray(evolution.topics) ? evolution.topics : [];
+    const now = new Date().toISOString();
+    
+    // Migrate from old string format to new object format
+    const topics = rawTopics.map((topic) => {
+      // If it's already an object, normalize it
+      if (topic && typeof topic === "object") {
+        return {
+          name: String(topic.name || topic).trim(),
+          count: typeof topic.count === "number" && Number.isFinite(topic.count) && topic.count > 0 ? topic.count : 1,
+          lastUsed: typeof topic.lastUsed === "string" ? topic.lastUsed : (topic.lastUsed || now),
+        };
+      }
+      // If it's a string (old format), convert to object
+      const name = String(topic || "").trim();
+      if (!name) return null;
+      return {
+        name,
+        count: 1,
+        lastUsed: now,
+      };
+    }).filter(Boolean).slice(0, EVOLUTION_TOPIC_LIMIT);
+
+    return {
+      topics,
+      lastUpdated: typeof evolution.lastUpdated === "string" ? evolution.lastUpdated : null,
+      usageCount:
+        typeof evolution.usageCount === "number" && Number.isFinite(evolution.usageCount)
+          ? evolution.usageCount
+          : 0,
+      lastPrompt: typeof evolution.lastPrompt === "string" ? evolution.lastPrompt : "",
+    };
+  }
+
+  function normalizeProfileObject(profile) {
+    if (!profile || typeof profile !== "object") return null;
+    return {
+      ...profile,
+      evolving_profile: normalizeEvolution(profile.evolving_profile),
+    };
+  }
+
+  function normalizeProfilesState(raw) {
+    const base = raw && typeof raw === "object" ? { ...DEFAULT_PROFILE_STATE, ...raw } : { ...DEFAULT_PROFILE_STATE };
+    base.list = Array.isArray(base.list)
+      ? base.list
+          .map(normalizeProfileObject)
+          .filter(Boolean)
+      : [];
+    return base;
+  }
+
+  function parseTopicsInput(value) {
+    return (value || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, EVOLUTION_TOPIC_LIMIT);
+  }
+
+  function buildEvolutionFromWizard(previous) {
+    const prev = previous ? normalizeEvolution(previous) : createEmptyEvolution();
+    const topicNames = wizardState.evolvingTopics.slice(0, EVOLUTION_TOPIC_LIMIT);
+    
+    // Convert user input (strings) to topic objects
+    // Match existing topics by name to preserve count and lastUsed
+    const normalizeTopicName = (name) => String(name || "").trim().toLowerCase();
+    const existingTopicsMap = new Map();
+    prev.topics.forEach((topic) => {
+      const key = normalizeTopicName(typeof topic === "string" ? topic : topic.name);
+      if (topic && typeof topic === "object") {
+        existingTopicsMap.set(key, topic);
+      } else {
+        existingTopicsMap.set(key, { name: String(topic).trim(), count: 1, lastUsed: new Date().toISOString() });
+      }
+    });
+
+    const now = new Date().toISOString();
+    const topicObjects = topicNames.map((topicName) => {
+      const key = normalizeTopicName(topicName);
+      if (existingTopicsMap.has(key)) {
+        // Preserve existing topic's count and lastUsed
+        return existingTopicsMap.get(key);
+      }
+      // New topic: create object with count 1
+      return {
+        name: String(topicName).trim(),
+        count: 1,
+        lastUsed: now,
+      };
+    });
+
+    // Check if topics changed
+    const prevTopicNames = prev.topics.map((t) => 
+      normalizeTopicName(typeof t === "string" ? t : t.name)
+    );
+    const newTopicNames = topicObjects.map((t) => normalizeTopicName(t.name));
+    const changedTopics =
+      topicObjects.length !== prev.topics.length ||
+      newTopicNames.some((name, idx) => name !== prevTopicNames[idx]);
+
+    const next = {
+      ...prev,
+      topics: topicObjects,
+    };
+    if (changedTopics) {
+      next.lastUpdated = now;
+    }
+    return next;
+  }
+
   // State
   let isRecordingHotkey = false;
   let recordedHotkey = null;
@@ -21,6 +153,8 @@
     persona: "",
     tone: "",
     guidelines: [],
+    evolvingTopics: [],
+    evolvingLastPrompt: "",
   };
   let onboardingState = {
     step: 1,
@@ -383,7 +517,16 @@
       persona: existing?.persona || "",
       tone: existing?.tone || "",
       guidelines: existing?.styleGuidelines || [],
+      evolvingTopics: [],
+      evolvingLastPrompt: "",
     };
+
+    const existingEvolution = normalizeEvolution(existing?.evolving_profile);
+    // Extract topic names from objects for wizard UI
+    wizardState.evolvingTopics = (existingEvolution.topics || []).map((topic) => 
+      typeof topic === "string" ? topic : (topic.name || "")
+    ).filter(Boolean);
+    wizardState.evolvingLastPrompt = existingEvolution.lastPrompt || "";
 
     const profileModal = document.getElementById("profile-modal");
     const onboardingModal = document.getElementById("onboarding-modal");
@@ -437,6 +580,17 @@
           <label>Style guidelines / constraints (one per line)</label>
           <textarea id="w-guidelines">${escapeHtml(wizardState.guidelines.join("\n"))}</textarea>
         </div>
+        <div class="field">
+          <label>Evolving focus topics (comma separated)</label>
+          <input id="w-evolving-topics" type="text" placeholder="e.g., C/C++, Police Investigations" value="${escapeHtml(wizardState.evolvingTopics.join(", "))}" />
+          <div class="hint">Maximum of ${EVOLUTION_TOPIC_LIMIT} topics allowed.</div>
+        </div>
+        ${wizardState.evolvingLastPrompt ? `
+          <div class="field">
+            <label>Last prompt signal (read-only)</label>
+            <textarea class="textarea-compact" disabled>${escapeHtml(wizardState.evolvingLastPrompt)}</textarea>
+          </div>
+        ` : ''}
       `;
     } else {
       wizardBody.innerHTML = `
@@ -451,6 +605,10 @@
         <div class="field">
           <label>Persona</label>
           <input type="text" value="${escapeHtml(wizardState.persona)}" disabled />
+        </div>
+        <div class="field">
+          <label>Focus topics</label>
+          <input type="text" value="${escapeHtml(wizardState.evolvingTopics.join(", "))}" disabled />
         </div>
       `;
     }
@@ -710,7 +868,7 @@
     // Create profile if provided
     if (onboardingState.profileName) {
       chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-        const profiles = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+        const profiles = normalizeProfilesState(data[STORAGE_PROFILES]);
         const profileId = `p_${Date.now()}`;
         const newProfile = {
           id: profileId,
@@ -721,6 +879,7 @@
           constraints: [],
           examples: [],
           domainTags: [],
+          evolving_profile: createEmptyEvolution(),
         };
         profiles.list.push(newProfile);
         if (!profiles.activeProfileId) profiles.activeProfileId = profileId;
@@ -735,11 +894,12 @@
 
   // Profile rendering
   function renderProfiles(p) {
+    const state = normalizeProfilesState(p);
     const profilesList = document.getElementById("profiles-list");
     if (!profilesList) return;
 
     profilesList.innerHTML = "";
-    if (!p.list.length) {
+    if (!state.list.length) {
       const empty = document.createElement("div");
       empty.className = "empty";
       empty.innerHTML = "No profile, create new one? <br/><br/>";
@@ -749,12 +909,16 @@
       btn.addEventListener("click", () => openWizard());
       empty.appendChild(btn);
       profilesList.appendChild(empty);
+      renderEvolvingEditor(state);
       return;
     }
 
-    p.list.forEach((prof) => {
+    state.list.forEach((prof) => {
       const card = document.createElement("div");
       card.className = "card";
+      if (state.activeProfileId === prof.id) {
+        card.classList.add("card-active");
+      }
       const meta = document.createElement("div");
       meta.className = "meta";
       const title = document.createElement("div");
@@ -769,14 +933,32 @@
         c.textContent = g;
         chips.appendChild(c);
       });
+      const evolution = normalizeEvolution(prof.evolving_profile);
       meta.appendChild(title);
       meta.appendChild(line);
       meta.appendChild(chips);
+      if (evolution.topics.length > 0) {
+        const evoRow = document.createElement("div");
+        evoRow.className = "muted muted-small";
+        // Extract topic names from objects
+        const topicNames = evolution.topics.map((topic) => 
+          typeof topic === "string" ? topic : (topic.name || "")
+        ).filter(Boolean);
+        const topicsText = topicNames.slice(0, 3).join(", ");
+        const pieces = [];
+        if (topicsText) pieces.push(`Focus: ${topicsText}`);
+        if (topicNames.length > 3) {
+          pieces.push(`${topicNames.length - 3} more`);
+        }
+        evoRow.textContent = pieces.join(" • ");
+        meta.appendChild(evoRow);
+      }
       const actions = document.createElement("div");
       const activate = document.createElement("button");
-      activate.textContent = p.activeProfileId === prof.id ? "Active" : "Set Active";
+      activate.textContent = state.activeProfileId === prof.id ? "Active" : "Set Active";
+      activate.disabled = state.activeProfileId === prof.id;
       activate.addEventListener("click", () => {
-        const updated = { ...p, activeProfileId: prof.id };
+        const updated = { ...state, list: state.list.slice(), activeProfileId: prof.id };
         chrome.storage.sync.set({ [STORAGE_PROFILES]: updated }, () => renderProfiles(updated));
       });
       const edit = document.createElement("button");
@@ -785,7 +967,10 @@
       const del = document.createElement("button");
       del.textContent = "Delete";
       del.addEventListener("click", () => {
-        const updated = { ...p, list: p.list.filter((x) => x.id !== prof.id) };
+        const updated = {
+          ...state,
+          list: state.list.filter((x) => x.id !== prof.id),
+        };
         if (updated.activeProfileId === prof.id) updated.activeProfileId = updated.list[0]?.id || null;
         chrome.storage.sync.set({ [STORAGE_PROFILES]: updated }, () => renderProfiles(updated));
       });
@@ -795,6 +980,176 @@
       card.appendChild(meta);
       card.appendChild(actions);
       profilesList.appendChild(card);
+    });
+
+    renderEvolvingEditor(state);
+  }
+
+  function formatRelativeTime(isoString) {
+    if (!isoString) return "Awaiting first manual update";
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return `Updated: ${isoString}`;
+    const diff = Date.now() - date.getTime();
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    if (diff < minute) return "Updated just now";
+    if (diff < hour) return `Updated ${Math.round(diff / minute)} min ago`;
+    if (diff < day) return `Updated ${Math.round(diff / hour)} hr ago`;
+    const days = Math.round(diff / day);
+    return `Updated ${days} day${days === 1 ? "" : "s"} ago`;
+  }
+
+  function buildEvolutionStatus(evolution) {
+    const usage = evolution.usageCount || 0;
+    const parts = [`Auto refinements captured: ${usage}`];
+    if (evolution.lastPrompt) {
+      parts.push("Latest prompt stored");
+    }
+    parts.push("Manual edits override until next refinement");
+    return parts.join(" • ");
+  }
+
+  function renderEvolvingEditor(state) {
+    const editor = document.getElementById("evolving-editor");
+    if (!editor) return;
+    const active = state.list.find((p) => p.id === state.activeProfileId) || state.list[0] || null;
+
+    if (!active) {
+      editor.classList.add("tab-panel-hidden");
+      editor.dataset.profileId = "";
+      return;
+    }
+
+    editor.classList.remove("tab-panel-hidden");
+    editor.dataset.profileId = active.id;
+
+    const evo = normalizeEvolution(active.evolving_profile);
+    const nameEl = document.getElementById("evolving-active-name");
+    if (nameEl) {
+      nameEl.textContent = `${active.name || "Untitled"}${active.persona ? ` • ${active.persona}` : ""}`;
+    }
+    const lastUpdatedEl = document.getElementById("evolving-last-updated");
+    if (lastUpdatedEl) {
+      lastUpdatedEl.textContent = formatRelativeTime(evo.lastUpdated);
+    }
+    const topicsEl = document.getElementById("evolving-topics");
+    if (topicsEl) {
+      // Extract topic names from objects
+      const topicNames = evo.topics.map((topic) => 
+        typeof topic === "string" ? topic : (topic.name || "")
+      ).filter(Boolean);
+      topicsEl.value = topicNames.join(", ");
+    }
+    const lastPromptEl = document.getElementById("evolving-lastprompt");
+    if (lastPromptEl) {
+      lastPromptEl.value = evo.lastPrompt || "";
+    }
+    const statusEl = document.getElementById("evolving-status");
+    if (statusEl) {
+      statusEl.textContent = buildEvolutionStatus(evo);
+    }
+  }
+
+  function handleEvolvingApply() {
+    const editor = document.getElementById("evolving-editor");
+    if (!editor || editor.classList.contains("tab-panel-hidden")) return;
+    const profileId = editor.dataset.profileId;
+    if (!profileId) {
+      showToast("Select a profile first");
+      return;
+    }
+
+    const applyBtn = document.getElementById("evolving-apply");
+    if (applyBtn) applyBtn.disabled = true;
+
+    const topicsInput = document.getElementById("evolving-topics");
+    const topics = parseTopicsInput(topicsInput?.value || "");
+
+    chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
+      const state = normalizeProfilesState(data[STORAGE_PROFILES]);
+      const idx = state.list.findIndex((p) => p.id === profileId);
+      if (idx < 0) {
+        showToast("Active profile not found");
+        if (applyBtn) applyBtn.disabled = false;
+        return;
+      }
+
+      const current = state.list[idx];
+      const prevEvolution = normalizeEvolution(current.evolving_profile);
+      
+      // Convert user input (strings) to topic objects
+      // Match existing topics by name to preserve count and lastUsed
+      const normalizeTopicName = (name) => String(name || "").trim().toLowerCase();
+      const existingTopicsMap = new Map();
+      prevEvolution.topics.forEach((topic) => {
+        const key = normalizeTopicName(typeof topic === "string" ? topic : topic.name);
+        if (topic && typeof topic === "object") {
+          existingTopicsMap.set(key, topic);
+        } else {
+          existingTopicsMap.set(key, { name: String(topic).trim(), count: 1, lastUsed: new Date().toISOString() });
+        }
+      });
+
+      const now = new Date().toISOString();
+      const topicObjects = topics.map((topicName) => {
+        const key = normalizeTopicName(topicName);
+        if (existingTopicsMap.has(key)) {
+          // Preserve existing topic's count and lastUsed
+          return existingTopicsMap.get(key);
+        }
+        // New topic: create object with count 1
+        return {
+          name: String(topicName).trim(),
+          count: 1,
+          lastUsed: now,
+        };
+      });
+
+      // Check if topics changed
+      const prevTopicNames = prevEvolution.topics.map((t) => 
+        normalizeTopicName(typeof t === "string" ? t : t.name)
+      );
+      const newTopicNames = topicObjects.map((t) => normalizeTopicName(t.name));
+      const topicsChanged =
+        topicObjects.length !== prevEvolution.topics.length ||
+        newTopicNames.some((name, i) => name !== prevTopicNames[i]);
+
+      if (!topicsChanged) {
+        showToast("No changes to apply");
+        renderEvolvingEditor(state);
+        if (applyBtn) applyBtn.disabled = false;
+        return;
+      }
+
+      const merged = {
+        ...prevEvolution,
+        topics: topicObjects,
+        lastUpdated: now,
+      };
+      state.list = state.list.slice();
+      state.list[idx] = { ...current, evolving_profile: merged };
+
+      chrome.storage.sync.set({ [STORAGE_PROFILES]: state }, () => {
+        const err = chrome.runtime?.lastError;
+        if (err) {
+          console.warn("[promptiply] Failed to persist manual evolution", err);
+          showToast("Could not save evolution changes");
+        } else {
+          renderProfiles(state);
+          renderEvolvingEditor(state);
+          showToast("Evolution updated");
+        }
+        if (applyBtn) applyBtn.disabled = false;
+      });
+    });
+  }
+
+  function handleEvolvingReset() {
+    chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
+      const state = normalizeProfilesState(data[STORAGE_PROFILES]);
+      renderEvolvingEditor(state);
+      showToast("Fields reset to stored values");
     });
   }
 
@@ -832,7 +1187,7 @@
 
   function importPredefinedProfile(pref, opts = { activate: true }) {
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-      const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+      const cur = normalizeProfilesState(data[STORAGE_PROFILES]);
       const exists = cur.list.find((x) => x.name === pref.name);
       if (exists) {
         if (opts.activate) {
@@ -851,6 +1206,7 @@
         constraints: [],
         examples: [],
         domainTags: [],
+        evolving_profile: createEmptyEvolution(),
         // Metadata for tracking imports
         importedFromPredefined: true,
         predefinedId: pref.id,
@@ -885,7 +1241,7 @@
   function showRestoreConfirmation() {
     console.log('[promptiply] showRestoreConfirmation called');
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-      const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+      const cur = normalizeProfilesState(data[STORAGE_PROFILES]);
       const predefinedProfiles = cur.list.filter(p => p.importedFromPredefined === true);
       const customProfiles = cur.list.filter(p => !p.importedFromPredefined);
       
@@ -951,7 +1307,7 @@
 
   function restoreDefaults(toDelete) {
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-      const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+      const cur = normalizeProfilesState(data[STORAGE_PROFILES]);
       
       // Store for undo
       deletedProfilesUndo = [...toDelete];
@@ -1015,7 +1371,7 @@
     }
     
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-      const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+      const cur = normalizeProfilesState(data[STORAGE_PROFILES]);
       
       // Restore deleted profiles
       const updated = {
@@ -1041,7 +1397,7 @@
   function exportProfiles() {
     console.log('[promptiply] exportProfiles called');
     chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-      const profiles = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+      const profiles = normalizeProfilesState(data[STORAGE_PROFILES]);
       
       if (profiles.list.length === 0) {
         showToast('No profiles to export');
@@ -1412,7 +1768,7 @@
       
       // Import the profiles
       chrome.storage.sync.get([STORAGE_PROFILES], (storageData) => {
-        const cur = storageData[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+        const cur = normalizeProfilesState(storageData[STORAGE_PROFILES]);
         
         // Add imported profiles (avoid duplicates by name)
         let imported = 0;
@@ -1426,7 +1782,8 @@
           }
           
           const id = `p_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-          cur.list.push({
+          const importedProfile = normalizeProfileObject({
+            ...prof,
             id,
             name: prof.name,
             persona: prof.persona || '',
@@ -1439,6 +1796,9 @@
             predefinedId: prof.predefinedId,
             importedAt: new Date().toISOString()
           });
+          if (importedProfile) {
+            cur.list.push(importedProfile);
+          }
           imported++;
         });
         
@@ -1612,6 +1972,7 @@
               .split("\n")
               .map((s) => s.trim())
               .filter(Boolean);
+            wizardState.evolvingTopics = parseTopicsInput(document.getElementById("w-evolving-topics")?.value || "");
           }
           setWizardStep(wizardState.step + 1);
         });
@@ -1622,7 +1983,7 @@
       if (wizardSave && !wizardSave.dataset.prAttached) {
         wizardSave.addEventListener("click", () => {
           chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-            const cur = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+            const cur = normalizeProfilesState(data[STORAGE_PROFILES]);
             if (wizardState.editingId) {
               const idx = cur.list.findIndex((p) => p.id === wizardState.editingId);
               if (idx >= 0) {
@@ -1632,6 +1993,7 @@
                   persona: wizardState.persona,
                   tone: wizardState.tone,
                   styleGuidelines: wizardState.guidelines,
+                  evolving_profile: buildEvolutionFromWizard(cur.list[idx].evolving_profile),
                 };
               }
             } else {
@@ -1645,6 +2007,7 @@
                 constraints: [],
                 examples: [],
                 domainTags: [],
+                evolving_profile: buildEvolutionFromWizard(),
               };
               cur.list.push(prof);
               if (!cur.activeProfileId) cur.activeProfileId = id;
@@ -1714,6 +2077,24 @@
         });
         importBtn.dataset.prAttached = "1";
         console.log("[promptiply] attachCoreListeners: bound import-profiles");
+      }
+
+      const evolvingApply = document.getElementById("evolving-apply");
+      if (evolvingApply && !evolvingApply.dataset.prAttached) {
+        evolvingApply.addEventListener("click", (e) => {
+          e.stopPropagation();
+          handleEvolvingApply();
+        });
+        evolvingApply.dataset.prAttached = "1";
+      }
+
+      const evolvingReset = document.getElementById("evolving-reset");
+      if (evolvingReset && !evolvingReset.dataset.prAttached) {
+        evolvingReset.addEventListener("click", (e) => {
+          e.stopPropagation();
+          handleEvolvingReset();
+        });
+        evolvingReset.dataset.prAttached = "1";
       }
 
       const success = attachedAny && tabEls.length > 0;
@@ -1875,7 +2256,7 @@
   });
 
   chrome.storage.sync.get([STORAGE_PROFILES], (data) => {
-    const p = data[STORAGE_PROFILES] || { list: [], activeProfileId: null };
+    const p = normalizeProfilesState(data[STORAGE_PROFILES]);
     renderProfiles(p);
   });
 
