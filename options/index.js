@@ -1750,37 +1750,47 @@
     }
   }
 
+  function estimateStorageSize(obj) {
+    // Rough estimate of storage size in bytes
+    return JSON.stringify(obj).length;
+  }
+
   function processImportData(data, statusEl, modal) {
     try {
       const profiles = parseImportEnvelope(data);
-      
+
       if (!Array.isArray(profiles) || profiles.length === 0) {
         statusEl.innerHTML = '<div class="status-error">No profiles found in import data</div>';
         return;
       }
-      
+
       // Validate profiles have required fields
       const invalid = profiles.filter(p => !p.name || typeof p.name !== 'string');
       if (invalid.length > 0) {
         statusEl.innerHTML = `<div class="status-error">Invalid profiles: ${invalid.length} profile(s) missing name</div>`;
         return;
       }
-      
-      // Import the profiles
+
+      // Show progress for large imports
+      if (profiles.length > 5) {
+        statusEl.innerHTML = `<div class="status-info">Processing ${profiles.length} profiles...</div>`;
+      }
+
+      // Import the profiles in batches to handle quota limits
       chrome.storage.sync.get([STORAGE_PROFILES], (storageData) => {
         const cur = normalizeProfilesState(storageData[STORAGE_PROFILES]);
-        
-        // Add imported profiles (avoid duplicates by name)
-        let imported = 0;
+
+        // Prepare profiles for import
+        let toImport = [];
         let skipped = 0;
-        
+
         profiles.forEach(prof => {
           const exists = cur.list.find(p => p.name === prof.name);
           if (exists) {
             skipped++;
             return;
           }
-          
+
           const id = `p_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
           const importedProfile = normalizeProfileObject({
             ...prof,
@@ -1797,25 +1807,98 @@
             importedAt: new Date().toISOString()
           });
           if (importedProfile) {
-            cur.list.push(importedProfile);
-            imported++;
+            toImport.push(importedProfile);
           }
         });
 
-        chrome.storage.sync.set({ [STORAGE_PROFILES]: cur }, () => {
-          const err = chrome.runtime.lastError;
-          if (err) {
-            statusEl.innerHTML = `<div class="status-error">Failed to save profiles: ${escapeHtml(err.message || String(err))}</div>`;
-            console.error('[promptiply] Import storage error:', err);
+        if (toImport.length === 0) {
+          statusEl.innerHTML = `<div class="status-warning">No new profiles to import${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}</div>`;
+          return;
+        }
+
+        // Batch import to avoid quota issues
+        const BATCH_SIZE = 5; // Import 5 profiles at a time
+        let batchIndex = 0;
+        let imported = 0;
+
+        function importNextBatch() {
+          const batch = toImport.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
+
+          if (batch.length === 0) {
+            // All done
+            renderProfiles(cur);
+            modal.remove();
+            showToast(`Imported ${imported} profile(s)${skipped > 0 ? `, skipped ${skipped} duplicate(s)` : ''}`);
+            console.log('[promptiply] Import complete:', { imported, skipped });
             return;
           }
-          renderProfiles(cur);
-          modal.remove();
-          showToast(`Imported ${imported} profile(s)${skipped > 0 ? `, skipped ${skipped} duplicate(s)` : ''}`);
-          console.log('[promptiply] Import complete:', { imported, skipped });
-        });
+
+          // Add batch to current list
+          batch.forEach(prof => cur.list.push(prof));
+
+          // Check estimated size
+          const estimatedSize = estimateStorageSize(cur);
+          const QUOTA_LIMIT = 7000; // Chrome sync quota is 8192 bytes per item, leave some margin
+
+          if (estimatedSize > QUOTA_LIMIT) {
+            // Too large, show error
+            statusEl.innerHTML = `<div class="status-error">Storage quota exceeded. Successfully imported ${imported} profiles, but ${toImport.length - imported} remaining profiles cannot fit.<br><br>Chrome sync storage limit: ~8KB per item. Consider removing some existing profiles or splitting the import into smaller batches.</div>`;
+            console.error('[promptiply] Storage quota would be exceeded:', { estimatedSize, limit: QUOTA_LIMIT });
+
+            // Remove the batch we just added
+            cur.list = cur.list.slice(0, -(batch.length));
+
+            // Save what we have so far
+            if (imported > 0) {
+              chrome.storage.sync.set({ [STORAGE_PROFILES]: cur }, () => {
+                renderProfiles(cur);
+              });
+            }
+            return;
+          }
+
+          // Try to save this batch
+          chrome.storage.sync.set({ [STORAGE_PROFILES]: cur }, () => {
+            const err = chrome.runtime.lastError;
+            if (err) {
+              // Quota exceeded or other error
+              if (err.message && err.message.includes('quota')) {
+                statusEl.innerHTML = `<div class="status-error">Storage quota exceeded after importing ${imported} profiles.<br><br>${toImport.length - imported} profiles could not be imported. Chrome sync storage limit: ~8KB total.<br><br>Suggestions:<br>• Remove some existing profiles to free up space<br>• Split your import into smaller batches<br>• Simplify profiles (remove long examples/guidelines)</div>`;
+              } else {
+                statusEl.innerHTML = `<div class="status-error">Failed to save profiles: ${escapeHtml(err.message || String(err))}</div>`;
+              }
+              console.error('[promptiply] Import storage error:', err);
+
+              // Remove the failed batch
+              cur.list = cur.list.slice(0, -(batch.length));
+
+              // Save what we have so far
+              if (imported > 0) {
+                chrome.storage.sync.set({ [STORAGE_PROFILES]: cur }, () => {
+                  renderProfiles(cur);
+                });
+              }
+              return;
+            }
+
+            // Success - move to next batch
+            imported += batch.length;
+            batchIndex++;
+
+            // Update progress
+            if (toImport.length > 5) {
+              statusEl.innerHTML = `<div class="status-info">Imported ${imported} of ${toImport.length} profiles...</div>`;
+            }
+
+            // Small delay between batches to avoid hitting rate limits
+            setTimeout(importNextBatch, 100);
+          });
+        }
+
+        // Start importing
+        importNextBatch();
       });
-      
+
     } catch (error) {
       statusEl.innerHTML = `<div class="status-error">${escapeHtml(error.message)}</div>`;
     }

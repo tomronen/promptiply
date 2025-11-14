@@ -406,6 +406,10 @@ button:focus-visible { outline:none; box-shadow: 0 0 0 3px rgba(124,58,237,0.35)
   color: #f44336;
 }
 
+.status-warning {
+  color: #ff9800;
+}
+
 .status-info {
   color: #666;
 }
