@@ -161,10 +161,15 @@ function matchesHotkey(e, combo) {
     if (msg && msg.type === 'PR_TRIGGER_REFINE') {
       tryRefine(adapter);
     }
-    
+
     // Listen for progress updates from local mode
     if (msg && msg.type === 'PR_PROGRESS_UPDATE') {
       updateProgress(msg.payload);
+    }
+
+    // Listen for profile switch notifications
+    if (msg && msg.type === 'PR_PROFILE_SWITCHED') {
+      showProfileSwitchNotification(msg.payload.profileName);
     }
   });
   
@@ -535,19 +540,75 @@ function matchesHotkey(e, combo) {
   function hideOverlay() {
     const el = document.querySelector('.pr-overlay');
     if (el) el.style.display = 'none';
-    
+
     // Remove Escape key listener
     if (overlayEscapeHandler) {
       document.removeEventListener('keydown', overlayEscapeHandler);
       overlayEscapeHandler = null;
     }
   }
+
+  function showProfileSwitchNotification(profileName) {
+    // Create a toast notification
+    const toast = document.createElement('div');
+    toast.className = 'pr-toast';
+    toast.textContent = `Profile: ${profileName}`;
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, #7c3aed, #06b6d4);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 100000;
+      animation: pr-toast-slide-in 0.3s ease;
+      pointer-events: none;
+    `;
+
+    document.body.appendChild(toast);
+
+    // Remove after 2 seconds
+    setTimeout(() => {
+      toast.style.animation = 'pr-toast-slide-out 0.3s ease';
+      setTimeout(() => {
+        if (toast.parentElement) {
+          toast.parentElement.removeChild(toast);
+        }
+      }, 300);
+    }, 2000);
+  }
 })();
 // Animations
 const prStyle = document.createElement('style');
 prStyle.textContent = `
   @keyframes pr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  
+
+  @keyframes pr-toast-slide-in {
+    from {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes pr-toast-slide-out {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+  }
+
   @keyframes pr-gentle-pulse {
     0%, 100% { 
       filter: brightness(1);

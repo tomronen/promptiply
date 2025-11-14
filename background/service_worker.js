@@ -466,6 +466,56 @@ chrome.commands.onCommand.addListener((cmd) => {
         chrome.tabs.sendMessage(tabs[0].id, { type: 'PR_TRIGGER_REFINE' });
       }
     });
+  } else if (cmd === 'switch-profile') {
+    // Cycle to the next profile
+    chrome.storage.sync.get(['profiles'], (data) => {
+      const profilesState = normalizeProfilesState(data.profiles);
+
+      if (!profilesState.list || profilesState.list.length === 0) {
+        console.log('[promptiply:bg] No profiles available to switch');
+        return;
+      }
+
+      // Find the index of the currently active profile
+      const currentIndex = profilesState.list.findIndex((p) => p.id === profilesState.activeProfileId);
+
+      // Calculate the next profile index (cycle through, including null/"no profile")
+      // We treat -1 (no active profile) as position before the first profile
+      let nextIndex;
+      if (currentIndex === -1) {
+        // Currently no profile selected, select the first one
+        nextIndex = 0;
+      } else if (currentIndex === profilesState.list.length - 1) {
+        // At the end, cycle back to "no profile" (null)
+        nextIndex = -1;
+      } else {
+        // Move to the next profile
+        nextIndex = currentIndex + 1;
+      }
+
+      // Set the new active profile
+      const newActiveProfileId = nextIndex === -1 ? null : profilesState.list[nextIndex].id;
+      profilesState.activeProfileId = newActiveProfileId;
+
+      chrome.storage.sync.set({ profiles: profilesState }, () => {
+        const profileName = nextIndex === -1
+          ? '(no profile)'
+          : (profilesState.list[nextIndex].name || profilesState.list[nextIndex].id);
+        console.log('[promptiply:bg] Switched to profile:', profileName);
+
+        // Show a notification to the user
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              type: 'PR_PROFILE_SWITCHED',
+              payload: { profileName }
+            }).catch(() => {
+              // Ignore errors if content script is not ready
+            });
+          }
+        });
+      });
+    });
   }
 });
 
